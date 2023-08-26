@@ -162,7 +162,7 @@ jobs:
           cp -r "${{ github.workspace }}/res/res" "${artifact_dir}/Abaddon.app/Contents/Resources/res"
           cp "${{runner.workspace}}/build/abaddon" "${artifact_dir}/Abaddon.app/Contents/MacOS/"
           install_name_tool -add_rpath @executable_path/../Frameworks/  "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"
-          otool -l "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon" | grep -oE 'name( \/opt\/| \/usr\/local\/).*' | sed -E -e 's/^name //' -e 's/ \(offset [0-9]+)//' | while read -r lib_path; install_name_tool -change "$lib_path" "@executable_path/../Frameworks/$(basename "$lib_path")" abaddon; cp "$lib_path" ${artifact_dir}/Abaddon.app/Contents/Frameworks/.; done
+          otool -l "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon" | grep -oE 'name( \/opt\/| \/usr\/local\/).*' | sed -E -e 's/^name //' -e 's/ \(offset [0-9]+)//' | while read -r lib_path; do install_name_tool -change "$lib_path" "@executable_path/../Frameworks/$(basename "$lib_path")" abaddon; cp "$lib_path" ${artifact_dir}/Abaddon.app/Contents/Frameworks/.; done
           
       - name: Upload build
         uses: actions/upload-artifact@v2
