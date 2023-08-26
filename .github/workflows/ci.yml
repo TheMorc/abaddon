@@ -156,11 +156,13 @@ jobs:
           artifact_dir=build/artifactdir/abaddon-${{ matrix.buildtype }}-${GITHUB_SHA::7}
           mkdir -p "${artifact_dir}"
           cp -r "${{ github.workspace }}/res/Abaddon.app" "${artifact_dir}/Abaddon.app"
-          cp "${{runner.workspace}}/build/abaddon" "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"
           cp -r "${{ github.workspace }}/res/css" "${artifact_dir}/Abaddon.app/Contents/Resources/css"
           cp -r "${{ github.workspace }}/res/res" "${artifact_dir}/Abaddon.app/Contents/Resources/res"
+          ls ${artifact_dir}
+          ls "${artifact_dir}/Abaddon.app/Contents/Resources"
+          cp "${{runner.workspace}}/build/abaddon" "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"
           install_name_tool -add_rpath @executable_path/../Frameworks/  "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"
-          otool -l ${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon | grep -oE 'name( \/opt\/| \/usr\/local\/).*' | sed -E -e 's/^name //' -e 's/ \(offset [0-9]+)//' | while read -r library_path; do library_name=$(basename "$library_path"); install_name_tool -change "$library_path" "@executable_path/../Frameworks/$library_name" abaddon; cp "$library_path" ${artifact_dir}/Abaddon.app/Contents/Frameworks/.; done
+          otool -l "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"x | grep -oE 'name( \/opt\/| \/usr\/local\/).*' | sed -E -e 's/^name //' -e 's/ \(offset [0-9]+)//' | while read -r lib_path; do lib_name=$(basename "$lib_path"); install_name_tool -change "$lib_path" "@executable_path/../Frameworks/$lib_name" abaddon; cp "$lib_path" ${artifact_dir}/Abaddon.app/Contents/Frameworks/.; done
           
       - name: Upload build
         uses: actions/upload-artifact@v2
