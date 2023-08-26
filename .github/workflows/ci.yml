@@ -155,7 +155,7 @@ jobs:
         run: |
           artifact_dir=build/artifactdir/abaddon-${{ matrix.buildtype }}-${GITHUB_SHA::7}
           mkdir -p "${artifact_dir}"
-          cp -r "${{ github.workspace }}/Abaddon.app" "${artifact_dir}/Abaddon.app"
+          cp -r "${{ github.workspace }}/res/Abaddon.app" "${artifact_dir}/Abaddon.app"
           cp "${{runner.workspace}}/build/abaddon" "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"
           cp -r "${{ github.workspace }}/res/css" "${artifact_dir}/Abaddon.app/Contents/Resources/css"
           cp -r "${{ github.workspace }}/res/res" "${artifact_dir}/Abaddon.app/Contents/Resources/res"
