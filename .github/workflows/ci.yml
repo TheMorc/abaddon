@@ -155,10 +155,13 @@ jobs:
         run: |
           artifact_dir=build/artifactdir/abaddon-${{ matrix.buildtype }}-${GITHUB_SHA::7}
           mkdir -p "${artifact_dir}"
-          cp "${{runner.workspace}}/build/abaddon" "${artifact_dir}/abaddon"
-          cp -r "${{ github.workspace }}/res/css" "${artifact_dir}/css"
-          cp -r "${{ github.workspace }}/res/res" "${artifact_dir}/res"
-
+          cp -r "${{ github.workspace }}/Abaddon.app" "${artifact_dir}/Abaddon.app"
+          cp "${{runner.workspace}}/build/abaddon" "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"
+          cp -r "${{ github.workspace }}/res/css" "${artifact_dir}/Abaddon.app/Contents/Resources/css"
+          cp -r "${{ github.workspace }}/res/res" "${artifact_dir}/Abaddon.app/Contents/Resources/res"
+          install_name_tool -add_rpath @executable_path/../Frameworks/  "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"
+          otool -l ${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon | grep -oE 'name( \/opt\/| \/usr\/local\/).*' | sed -E -e 's/^name //' -e 's/ \(offset [0-9]+)//' | while read -r library_path; do library_name=$(basename "$library_path"); install_name_tool -change "$library_path" "@executable_path/../Frameworks/$library_name" abaddon; cp "$library_path" ${artifact_dir}/Abaddon.app/Contents/Frameworks/.; done
+          
       - name: Upload build
         uses: actions/upload-artifact@v2
         with:

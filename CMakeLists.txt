@@ -38,6 +38,10 @@ if (WIN32)
     add_compile_definitions(NOMINMAX)
 endif ()
 
+if (APPLE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
+endif()
+
 include(TestBigEndian)
 test_big_endian(IS_BIG_ENDIAN)
 if (IS_BIG_ENDIAN)
@@ -193,12 +197,6 @@ if (ENABLE_VOICE)
         else ()
             target_link_libraries(abaddon rnnoise::rnnoise)
         endif ()
-    endif ()
-
-    if (APPLE)
-        target_link_libraries(abaddon "-framework CoreFoundation")
-        target_link_libraries(abaddon "-framework CoreAudio")
-        target_link_libraries(abaddon "-framework AudioToolbox")
     endif ()
 endif ()
 
