@@ -158,10 +158,7 @@ jobs:
           cp -r "${{ github.workspace }}/res/Abaddon.app" "${artifact_dir}/Abaddon.app"
           cp -r "${{ github.workspace }}/res/css" "${artifact_dir}/Abaddon.app/Contents/Resources/css"
           cp -r "${{ github.workspace }}/res/res" "${artifact_dir}/Abaddon.app/Contents/Resources/res"
-          ls "${{runner.workspace}}/build/"
-          cp "${{runner.workspace}}/build/abaddon" "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"
-          ls "${artifact_dir}/Abaddon.app/Contents/"
-          ls "${artifact_dir}/Abaddon.app/Contents/MacOS/"
+          cp "${{runner.workspace}}/build/abaddon" "${artifact_dir}/Abaddon.app/Contents/MacOS/"
           install_name_tool -add_rpath @executable_path/../Frameworks/  "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"
           otool -l "${artifact_dir}/Abaddon.app/Contents/MacOS/abaddon"x | grep -oE 'name( \/opt\/| \/usr\/local\/).*' | sed -E -e 's/^name //' -e 's/ \(offset [0-9]+)//' | while read -r lib_path; do lib_name=$(basename "$lib_path"); install_name_tool -change "$lib_path" "@executable_path/../Frameworks/$lib_name" abaddon; cp "$lib_path" ${artifact_dir}/Abaddon.app/Contents/Frameworks/.; done
           
