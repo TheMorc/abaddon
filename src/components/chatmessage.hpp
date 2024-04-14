@@ -28,8 +28,7 @@ protected:
     Gtk::TextView *CreateTextComponent(const Message &data); // Message.Content
     void UpdateTextComponent(Gtk::TextView *tv);
     Gtk::Widget *CreateEmbedsComponent(const std::vector<EmbedData> &embeds);
-    static Gtk::Widget *CreateEmbedComponent(const EmbedData &data); // Message.Embeds[0]
-    Gtk::Widget *CreateImageComponent(const std::string &proxy_url, const std::string &url, int inw, int inh);
+    static Gtk::Widget *CreateEmbedComponent(const EmbedData &data, bool); // Message.Embeds[0]
     Gtk::Widget *CreateAttachmentComponent(const AttachmentData &data); // non-image attachments
     Gtk::Widget *CreateStickersComponent(const std::vector<StickerItem> &data);
     Gtk::Widget *CreateReactionsComponent(const Message &data);

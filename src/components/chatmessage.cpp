@@ -47,16 +47,8 @@ ChatMessageItemContainer *ChatMessageItemContainer::FromMessage(const Message &d
     // i dont think attachments can be edited
     // also this can definitely be done much better holy shit
     for (const auto &a : data.Attachments) {
-        if (IsURLViewableImage(a.ProxyURL) && a.Width.has_value() && a.Height.has_value()) {
-            auto *widget = container->CreateImageComponent(a.ProxyURL, a.URL, *a.Width, *a.Height);
-            if (a.Description.has_value()) {
-                widget->set_tooltip_text(*a.Description);
-            }
-            container->m_main.add(*widget);
-        } else {
             auto *widget = container->CreateAttachmentComponent(a);
             container->m_main.add(*widget);
-        }
     }
 
     // only 1?
@@ -294,11 +286,11 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedsComponent(const std::vector<E
     auto *box = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL));
     for (const auto &embed : embeds) {
         if (IsEmbedImageOnly(embed)) {
-            auto *widget = CreateImageComponent(*embed.Thumbnail->ProxyURL, *embed.Thumbnail->URL, *embed.Thumbnail->Width, *embed.Thumbnail->Height);
+            auto *widget = CreateEmbedComponent(embed, true);
             widget->show();
             box->add(*widget);
         } else {
-            auto *widget = CreateEmbedComponent(embed);
+            auto *widget = CreateEmbedComponent(embed, false);
             widget->show();
             box->add(*widget);
         }
@@ -306,7 +298,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedsComponent(const std::vector<E
     return box;
 }
 
-Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &embed) {
+Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &embed, bool ImageOnly) {
     Gtk::EventBox *ev = Gtk::manage(new Gtk::EventBox);
     ev->set_can_focus(true);
     Gtk::Box *main = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL));
@@ -373,7 +365,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
         }
     }
 
-    if (!embed.Provider.has_value() || embed.Provider->Name != "YouTube") { // youtube link = no description
+	if (!embed.Provider.has_value()) { // youtube link = no description
         if (embed.Description.has_value()) {
             auto *desc_label = Gtk::manage(new Gtk::Label);
             desc_label->set_text(*embed.Description);
@@ -437,10 +429,23 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
         const int clamp_width = Abaddon::Get().GetSettings().ImageEmbedClampWidth;
         const int clamp_height = Abaddon::Get().GetSettings().ImageEmbedClampHeight;
         GetImageDimensions(*embed.Image->Width, *embed.Image->Height, w, h, clamp_width, clamp_height);
-
-        auto *img = Gtk::manage(new LazyImage(*embed.Image->ProxyURL, w, h, false));
+        
+    	std::string::size_type pos = embed.Image->ProxyURL->find("https/media.tenor.com");
+    	std::string modifiedUrl = *embed.Image->ProxyURL;
+    	if (pos != -1)
+    		modifiedUrl = "https://media1.tenor.com/m" + std::regex_replace(embed.Image->ProxyURL->substr(pos+21, embed.Image->ProxyURL->length()-pos-25), std::regex("AAe"), "AAC") + ".gif";
+    		
+    	if (GetExtension(modifiedUrl) == ".mov" || GetExtension(modifiedUrl) == ".mp4")
+    		modifiedUrl += "format=jpeg";	
+    	
+    	LazyImage* lazyImage = new LazyImage(modifiedUrl, w, h, false);
+    	if (GetExtension(modifiedUrl) == ".gif")
+        	lazyImage->SetAnimated(true);
+    	
+        auto *img = Gtk::manage(lazyImage);
         img->set_halign(Gtk::ALIGN_CENTER);
-        img->set_margin_top(5);
+        if(!ImageOnly)
+        	img->set_margin_top(5);
         img->set_size_request(w, h);
         content->pack_start(*img);
     }
@@ -458,12 +463,30 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
     }
 
     if (embed.Thumbnail.has_value() && embed.Thumbnail->ProxyURL.has_value()) {
-        int w, h;
-        GetImageDimensions(*embed.Thumbnail->Width, *embed.Thumbnail->Height, w, h, ThumbnailSize, ThumbnailSize);
-
-        auto *thumbnail = Gtk::manage(new LazyImage(*embed.Thumbnail->ProxyURL, w, h, false));
+        int w = 0, h = 0;
+        const int clamp_width = Abaddon::Get().GetSettings().ImageEmbedClampWidth;
+        const int clamp_height = Abaddon::Get().GetSettings().ImageEmbedClampHeight;
+        if (ImageOnly)
+	        GetImageDimensions(*embed.Thumbnail->Width, *embed.Thumbnail->Height, w, h, clamp_width, clamp_height);
+    	else
+    		GetImageDimensions(*embed.Thumbnail->Width, *embed.Thumbnail->Height, w, h, ThumbnailSize, ThumbnailSize);
+        
+    	std::string::size_type pos = embed.Thumbnail->ProxyURL->find("https/media.tenor.com");
+    	std::string modifiedUrl = *embed.Thumbnail->ProxyURL;
+    	if (pos != -1)
+    		modifiedUrl = "https://media1.tenor.com/m" + std::regex_replace(embed.Thumbnail->ProxyURL->substr(pos+21, embed.Thumbnail->ProxyURL->length()-pos-25), std::regex("AAe"), "AAC") + ".gif";
+    		
+    	if (GetExtension(modifiedUrl) == ".mov" || GetExtension(modifiedUrl) == ".mp4")
+    		modifiedUrl += "format=jpeg";	
+    	
+    	LazyImage* lazyImage = new LazyImage(modifiedUrl, w, h, false);
+    	if (GetExtension(modifiedUrl) == ".gif")
+        	lazyImage->SetAnimated(true);
+    	
+        auto *thumbnail = Gtk::manage(lazyImage);
         thumbnail->set_size_request(w, h);
-        thumbnail->set_margin_start(8);
+        if(!ImageOnly)
+        	thumbnail->set_margin_start(8);
         main->pack_end(*thumbnail);
     }
 
@@ -476,12 +499,10 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
         style->add_provider(provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     }
 
+	
     style->add_class("embed");
-
     main->set_margin_bottom(8);
     main->set_hexpand(false);
-    main->set_hexpand(false);
-    main->set_halign(Gtk::ALIGN_START);
     main->set_halign(Gtk::ALIGN_START);
     main->pack_start(*content);
 
@@ -491,51 +512,47 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
     return ev;
 }
 
-Gtk::Widget *ChatMessageItemContainer::CreateImageComponent(const std::string &proxy_url, const std::string &url, int inw, int inh) {
+
+Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const AttachmentData &data) {
     int w, h;
     const int clamp_width = Abaddon::Get().GetSettings().ImageEmbedClampWidth;
     const int clamp_height = Abaddon::Get().GetSettings().ImageEmbedClampHeight;
-    GetImageDimensions(inw, inh, w, h, clamp_width, clamp_height);
-
-    Gtk::EventBox *ev = Gtk::manage(new Gtk::EventBox);
     
-    std::string::size_type pos = proxy_url.find("https/media.tenor.com");
-    std::string modifiedUrl = proxy_url;
-    if (pos != -1)
-    	modifiedUrl = "https://media1.tenor.com/m" + std::regex_replace(proxy_url.substr(pos+21, proxy_url.length()-pos-25), std::regex("AAe"), "AAC") + ".gif";
-    	
-    
-    LazyImage* lazyImage = new LazyImage(modifiedUrl, w, h, false);
-    if (GetExtension(modifiedUrl) == ".gif")
-        lazyImage->SetAnimated(true);
-    Gtk::Image *widget = Gtk::manage(lazyImage);
-    ev->add(*widget);
-    ev->set_halign(Gtk::ALIGN_START);
-    widget->set_halign(Gtk::ALIGN_START);
-    widget->set_size_request(w, h);
-
-    AddClickHandler(ev, url);
-
-    const auto on_button_press_event = [this, url](GdkEventButton *e) -> bool {
-        if (e->type == GDK_BUTTON_PRESS && e->button == GDK_BUTTON_SECONDARY) {
-            m_selected_link = url;
-            m_link_menu.popup_at_pointer(reinterpret_cast<GdkEvent *>(e));
-            return true;
-        }
-        return false;
-    };
-    ev->signal_button_press_event().connect(on_button_press_event, false);
-
-    return ev;
-}
-
-Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const AttachmentData &data) {
     auto *ev = Gtk::manage(new Gtk::EventBox);
+    Gtk::Box *content = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL));
+    
     auto *btn = Gtk::manage(new Gtk::Label(data.Filename + " " + HumanReadableBytes(data.Bytes))); // Gtk::LinkButton flat out doesn't work :D
     ev->set_hexpand(false);
     ev->set_halign(Gtk::ALIGN_START);
     ev->get_style_context()->add_class("message-attachment-box");
-    ev->add(*btn);
+	ev->add(*content);
+	content->add(*btn);
+	
+	if(IsURLViewableImage(data.ProxyURL)){
+    	GetImageDimensions(*data.Width, *data.Height, w, h, clamp_width, clamp_height);
+	
+    	
+    	std::string::size_type pos = data.ProxyURL.find("https/media.tenor.com");
+    	std::string modifiedUrl = data.ProxyURL;
+    	if (pos != -1)
+    		modifiedUrl = "https://media1.tenor.com/m" + std::regex_replace(data.ProxyURL.substr(pos+21, data.ProxyURL.length()-pos-25), std::regex("AAe"), "AAC") + ".gif";
+    		
+    	if (GetExtension(modifiedUrl) == ".mov" || GetExtension(modifiedUrl) == ".mp4")
+    		modifiedUrl += "format=jpeg";	
+    		
+    	LazyImage* lazyImage = new LazyImage(modifiedUrl, w, h, false);
+    	if (GetExtension(modifiedUrl) == ".gif")
+    	    lazyImage->SetAnimated(true);
+    	
+    	Gtk::Image *widget = Gtk::manage(lazyImage);
+    	widget->set_size_request(w, h);
+    	widget->set_margin_right(2);
+    	widget->set_margin_left(2);
+    	widget->set_margin_bottom(2);
+    	
+		content->add(*widget);
+    }
+    
 
     AddClickHandler(ev, data.URL);
 
