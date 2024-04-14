@@ -498,7 +498,10 @@ Gtk::Widget *ChatMessageItemContainer::CreateImageComponent(const std::string &p
     GetImageDimensions(inw, inh, w, h, clamp_width, clamp_height);
 
     Gtk::EventBox *ev = Gtk::manage(new Gtk::EventBox);
-    Gtk::Image *widget = Gtk::manage(new LazyImage(proxy_url, w, h, false));
+    LazyImage* lazyImage = new LazyImage(proxy_url, w, h, false);
+    if (GetExtension(proxy_url) == ".gif" && Abaddon::Get().GetSettings().AnimatedImageEmbeds)
+        lazyImage->SetAnimated(true);
+    Gtk::Image *widget = Gtk::manage(lazyImage);
     ev->add(*widget);
     ev->set_halign(Gtk::ALIGN_START);
     widget->set_halign(Gtk::ALIGN_START);
@@ -630,11 +633,14 @@ Gtk::Widget *ChatMessageItemContainer::CreateReactionsComponent(const Message &d
         } else { // custom
             ev->set_tooltip_text(reaction.Emoji.Name);
 
-            auto *img = Gtk::make_managed<LazyImage>(reaction.Emoji.GetURL(), 16, 16);
-            if (reaction.Emoji.IsEmojiAnimated() && Abaddon::Get().GetSettings().ShowAnimations) {
-                img->SetURL(reaction.Emoji.GetURL("gif"));
-                img->SetAnimated(true);
+
+            LazyImage* lazyImage = new LazyImage(reaction.Emoji.GetURL(), 16, 16);
+            if (reaction.Emoji.IsAnimated && Abaddon::Get().GetSettings().ShowAnimations){
+                lazyImage->SetURL(reaction.Emoji.GetURL("gif"));
+                lazyImage->SetAnimated(true);
             }
+            
+            auto img = Gtk::manage(lazyImage);
             img->set_can_focus(false);
             box->add(*img);
         }

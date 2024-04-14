@@ -196,6 +196,7 @@ void SettingsManager::Close() {
                     }
                     break;
             }
+
         }
 
         HandleWriteToken();

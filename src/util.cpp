@@ -170,6 +170,7 @@ bool IsURLViewableImage(const std::string &url) {
     const auto ext = GetExtension(lw_url);
     static const char *exts[] = { ".jpeg",
                                   ".jpg",
+                                  ".gif",
                                   ".png", nullptr };
     const char *str = ext.c_str();
     for (int i = 0; exts[i] != nullptr; i++)

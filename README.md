@@ -319,6 +319,7 @@ For example, memory_db would be set by adding `memory_db = true` under the line 
 | `classic_channels`             | boolean | false   | use classic Discord-style interface for server/channel listing                                                             |
 | `classic_change_guild_on_open` | boolean | true    | change displayed guild when selecting a channel (classic channel list)                                                     |
 
+
 #### style
 
 | Setting                 | Type   | Description                                         |
