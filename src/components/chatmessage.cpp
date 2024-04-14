@@ -1,8 +1,11 @@
 #include "chatmessage.hpp"
+#include <unordered_map>
+#include <gtkmm/flowbox.h>
+#include "abaddon.hpp"
 #include "constants.hpp"
 #include "lazyimage.hpp"
 #include "misc/chatutil.hpp"
-#include <unordered_map>
+#include "util.hpp"
 
 ChatMessageItemContainer::ChatMessageItemContainer()
     : m_main(Gtk::ORIENTATION_VERTICAL) {
@@ -46,6 +49,9 @@ ChatMessageItemContainer *ChatMessageItemContainer::FromMessage(const Message &d
     for (const auto &a : data.Attachments) {
         if (IsURLViewableImage(a.ProxyURL) && a.Width.has_value() && a.Height.has_value()) {
             auto *widget = container->CreateImageComponent(a.ProxyURL, a.URL, *a.Width, *a.Height);
+            if (a.Description.has_value()) {
+                widget->set_tooltip_text(*a.Description);
+            }
             container->m_main.add(*widget);
         } else {
             auto *widget = container->CreateAttachmentComponent(a);
@@ -361,7 +367,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
                 }
                 return false;
             });
-            static auto color = Abaddon::Get().GetSettings().LinkColor;
+            const auto color = title_label->get_style_context()->get_color(Gtk::STATE_FLAG_LINK);
             title_label->override_color(Gdk::RGBA(color));
             title_label->set_markup("<b>" + Glib::Markup::escape_text(*embed.Title) + "</b>");
         }
@@ -428,7 +434,9 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
 
     if (embed.Image.has_value() && embed.Image->ProxyURL.has_value()) {
         int w = 0, h = 0;
-        GetImageDimensions(*embed.Image->Width, *embed.Image->Height, w, h, EmbedImageWidth, EmbedImageHeight);
+        const int clamp_width = Abaddon::Get().GetSettings().ImageEmbedClampWidth;
+        const int clamp_height = Abaddon::Get().GetSettings().ImageEmbedClampHeight;
+        GetImageDimensions(*embed.Image->Width, *embed.Image->Height, w, h, clamp_width, clamp_height);
 
         auto *img = Gtk::manage(new LazyImage(*embed.Image->ProxyURL, w, h, false));
         img->set_halign(Gtk::ALIGN_CENTER);
@@ -485,7 +493,9 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
 
 Gtk::Widget *ChatMessageItemContainer::CreateImageComponent(const std::string &proxy_url, const std::string &url, int inw, int inh) {
     int w, h;
-    GetImageDimensions(inw, inh, w, h);
+    const int clamp_width = Abaddon::Get().GetSettings().ImageEmbedClampWidth;
+    const int clamp_height = Abaddon::Get().GetSettings().ImageEmbedClampHeight;
+    GetImageDimensions(inw, inh, w, h, clamp_width, clamp_height);
 
     Gtk::EventBox *ev = Gtk::manage(new Gtk::EventBox);
     LazyImage* lazyImage = new LazyImage(proxy_url, w, h, false);
@@ -623,6 +633,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateReactionsComponent(const Message &d
         } else { // custom
             ev->set_tooltip_text(reaction.Emoji.Name);
 
+
             LazyImage* lazyImage = new LazyImage(reaction.Emoji.GetURL(), 16, 16);
             if (reaction.Emoji.IsAnimated && Abaddon::Get().GetSettings().ShowAnimations){
                 lazyImage->SetURL(reaction.Emoji.GetURL("gif"));
@@ -666,7 +677,12 @@ Gtk::Widget *ChatMessageItemContainer::CreateReplyComponent(const Message &data)
                 if (role.has_value()) {
                     const auto author = discord.GetUser(author_id);
                     if (author.has_value()) {
-                        return "<b><span color=\"#" + IntToCSSColor(role->Color) + "\">" + author->GetDisplayNameEscaped(guild_id) + "</span></b>";
+                        const auto is_mention = !data.Interaction.has_value() && data.DoesMention(author_id);
+                        if (is_mention) {
+                            return "<b><span color=\"#" + IntToCSSColor(role->Color) + "\">@" + author->GetDisplayNameEscaped(guild_id) + "</span></b>";
+                        } else {
+                            return "<b><span color=\"#" + IntToCSSColor(role->Color) + "\">" + author->GetDisplayNameEscaped(guild_id) + "</span></b>";
+                        }
                     }
                 }
             }
@@ -722,16 +738,12 @@ Gtk::Widget *ChatMessageItemContainer::CreateReplyComponent(const Message &data)
                 HandleChannelMentions(buf);
                 text = Glib::Markup::escape_text(buf->get_text());
             }
-            // getting markup out of a textbuffer seems like something that to me should be really simple
-            // but actually is horribly annoying. replies won't have mention colors because you can't do this
-            // also no emojis because idk how to make a textview act like a label
-            // which of course would not be an issue if i could figure out how to get fonts to work on this god-forsaken framework
-            // oh well
-            // but ill manually get colors for the user who is being replied to
-            if (referenced.GuildID.has_value())
+
+            if (referenced.GuildID.has_value()) {
                 lbl->set_markup(get_author_markup(referenced.Author.ID, *referenced.GuildID) + ": " + text);
-            else
+            } else {
                 lbl->set_markup(get_author_markup(referenced.Author.ID) + ": " + text);
+            }
         }
     } else {
         lbl->set_markup("<i>reply unavailable</i>");
@@ -742,6 +754,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateReplyComponent(const Message &data)
 
 bool ChatMessageItemContainer::IsEmbedImageOnly(const EmbedData &data) {
     if (!data.Thumbnail.has_value()) return false;
+    if (data.Title.has_value()) return false;
     if (data.Author.has_value()) return false;
     if (data.Description.has_value()) return false;
     if (data.Fields.has_value()) return false;
@@ -856,7 +869,8 @@ void ChatMessageItemContainer::HandleLinks(Gtk::TextView &tv) {
         std::string link = match.fetch(0);
         auto tag = buf->create_tag();
         m_link_tagmap[tag] = link;
-        tag->property_foreground_rgba() = Gdk::RGBA(Abaddon::Get().GetSettings().LinkColor);
+        const auto color = tv.get_style_context()->get_color(Gtk::STATE_FLAG_LINK);
+        tag->property_foreground_rgba() = color;
         tag->set_property("underline", 1); // stupid workaround for vcpkg bug (i think)
 
         const auto chars_start = g_utf8_pointer_to_offset(text.c_str(), text.c_str() + mstart);
@@ -927,11 +941,22 @@ ChatMessageHeader::ChatMessageHeader(const Message &data)
     const auto author = Abaddon::Get().GetDiscordClient().GetUser(UserID);
     auto &img = Abaddon::Get().GetImageManager();
 
+    std::string avatar_url;
+    if (data.IsWebhook()) {
+        const auto webhook_data = Abaddon::Get().GetDiscordClient().GetWebhookMessageData(data.ID);
+        if (webhook_data.has_value()) {
+            avatar_url = webhook_data->GetAvatarURL();
+        }
+    }
+    if (avatar_url.empty()) {
+        avatar_url = author->GetAvatarURL(data.GuildID);
+    }
+
     auto cb = [this](const Glib::RefPtr<Gdk::Pixbuf> &pb) {
         m_static_avatar = pb->scale_simple(AvatarSize, AvatarSize, Gdk::INTERP_BILINEAR);
         m_avatar.property_pixbuf() = m_static_avatar;
     };
-    img.LoadFromURL(author->GetAvatarURL(data.GuildID), sigc::track_obj(cb, *this));
+    img.LoadFromURL(avatar_url, sigc::track_obj(cb, *this));
 
     if (author->HasAnimatedAvatar(data.GuildID)) {
         auto cb = [this](const Glib::RefPtr<Gdk::PixbufAnimation> &pb) {
@@ -964,10 +989,11 @@ ChatMessageHeader::ChatMessageHeader(const Message &data)
         m_extra->set_can_focus(false);
         m_extra->set_use_markup(true);
     }
-    if (author->IsABot())
-        m_extra->set_markup("<b>BOT</b>");
-    else if (data.WebhookID.has_value())
+    if (data.IsWebhook()) {
         m_extra->set_markup("<b>Webhook</b>");
+    } else if (author->IsABot()) {
+        m_extra->set_markup("<b>BOT</b>");
+    }
 
     m_timestamp.set_text(data.ID.GetLocalTimestamp());
     m_timestamp.set_hexpand(true);
@@ -1027,11 +1053,21 @@ ChatMessageHeader::ChatMessageHeader(const Message &data)
     show_all();
 
     auto &discord = Abaddon::Get().GetDiscordClient();
-    auto role_update_cb = [this](...) { UpdateName(); };
-    discord.signal_role_update().connect(sigc::track_obj(role_update_cb, *this));
-    auto guild_member_update_cb = [this](const auto &, const auto &) { UpdateName(); };
-    discord.signal_guild_member_update().connect(sigc::track_obj(guild_member_update_cb, *this));
-    UpdateName();
+    if (data.IsWebhook()) {
+        const auto webhook_data = discord.GetWebhookMessageData(data.ID);
+        if (webhook_data.has_value()) {
+            const auto name = Glib::Markup::escape_text(webhook_data->Username);
+            m_author.set_markup("<span weight='bold'>" + name + "</span>");
+        } else {
+            UpdateName();
+        }
+    } else {
+        auto role_update_cb = [this](...) { UpdateName(); };
+        discord.signal_role_update().connect(sigc::track_obj(role_update_cb, *this));
+        auto guild_member_update_cb = [this](const auto &, const auto &) { UpdateName(); };
+        discord.signal_guild_member_update().connect(sigc::track_obj(guild_member_update_cb, *this));
+        UpdateName();
+    }
     AttachUserMenuHandler(m_meta_ev);
     AttachUserMenuHandler(m_avatar_ev);
 }
@@ -1043,10 +1079,9 @@ void ChatMessageHeader::UpdateName() {
     const auto chan = discord.GetChannel(ChannelID);
     bool is_guild = chan.has_value() && chan->GuildID.has_value();
     if (is_guild) {
-        const auto member = discord.GetMember(UserID, *chan->GuildID);
         const auto role_id = discord.GetMemberHoistedRole(*chan->GuildID, UserID, true);
         const auto role = discord.GetRole(role_id);
-        const auto name = GetEscapedDisplayName(*user, member);
+        const auto name = user->GetDisplayNameEscaped(*chan->GuildID);
 
         std::string md;
         if (role.has_value())
@@ -1074,13 +1109,6 @@ void ChatMessageHeader::AttachUserMenuHandler(Gtk::Widget &widget) {
 
         return false;
     });
-}
-
-Glib::ustring ChatMessageHeader::GetEscapedDisplayName(const UserData &user, const std::optional<GuildMember> &member) {
-    if (member.has_value() && !member->Nickname.empty())
-        return Glib::Markup::escape_text(member->Nickname);
-    else
-        return Glib::Markup::escape_text(user.GetDisplayNameEscaped());
 }
 
 bool ChatMessageHeader::on_author_button_press(GdkEventButton *ev) {

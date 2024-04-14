@@ -1,5 +1,8 @@
 #include "mainwindow.hpp"
 
+#include "abaddon.hpp"
+#include "util.hpp"
+
 MainWindow::MainWindow()
     : m_main_box(Gtk::ORIENTATION_VERTICAL)
     , m_content_box(Gtk::ORIENTATION_HORIZONTAL)
@@ -33,6 +36,7 @@ MainWindow::MainWindow()
     });
 #endif
 
+    m_channel_list.SetClassic(Abaddon::Get().GetSettings().ClassicChannels);
     m_channel_list.set_vexpand(true);
     m_channel_list.set_size_request(-1, -1);
     m_channel_list.show();
@@ -392,7 +396,7 @@ void MainWindow::SetupMenu() {
     });
 
     m_menu_view_channels.signal_activate().connect([this]() {
-        m_channel_list.set_visible(m_menu_view_channels.get_active());
+        m_left_pane.set_visible(m_menu_view_channels.get_active());
     });
 
     m_menu_view_members.signal_activate().connect([this]() {

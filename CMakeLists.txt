@@ -11,6 +11,7 @@ option(USE_LIBHANDY "Enable features that require libhandy (default)" ON)
 option(ENABLE_VOICE "Enable voice suppport" ON)
 option(USE_KEYCHAIN "Store the token in the keychain (default)" ON)
 option(ENABLE_NOTIFICATION_SOUNDS "Enable notification sounds (default)" ON)
+option(ENABLE_RNNOISE "Enable RNNoise for voice activity detection (default)" ON)
 option(ENABLE_QRCODE_LOGIN "Enable QR code login (default)" ON)
 
 find_package(nlohmann_json REQUIRED)
@@ -37,22 +38,16 @@ if (WIN32)
     add_compile_definitions(NOMINMAX)
 endif ()
 
-include(TestBigEndian)
-test_big_endian(IS_BIG_ENDIAN)
-if (IS_BIG_ENDIAN)
-    add_compile_definitions(ABADDON_IS_BIG_ENDIAN)
-endif ()
-
 configure_file(${PROJECT_SOURCE_DIR}/src/config.h.in ${PROJECT_BINARY_DIR}/config.h)
 
 file(GLOB_RECURSE ABADDON_SOURCES
         "src/*.h"
         "src/*.hpp"
         "src/*.cpp"
-        )
+)
 
 list(FILTER ABADDON_SOURCES EXCLUDE REGEX ".*notifier_gio\\.cpp$")
-list(FILTER ABADDON_SOURCES EXCLUDE REGEX ".*notifier_null\\.cpp$")
+list(FILTER ABADDON_SOURCES EXCLUDE REGEX ".*notifier_fallback\\.cpp$")
 
 add_executable(abaddon ${ABADDON_SOURCES})
 target_include_directories(abaddon PUBLIC ${PROJECT_SOURCE_DIR}/src)
@@ -82,7 +77,7 @@ endif ()
 if (NOT WIN32)
     target_sources(abaddon PRIVATE src/notifications/notifier_gio.cpp)
 else ()
-    target_sources(abaddon PRIVATE src/notifications/notifier_null.cpp)
+    target_sources(abaddon PRIVATE src/notifications/notifier_fallback.cpp)
 endif ()
 
 if (IXWebSocket_LIBRARIES)
@@ -147,6 +142,12 @@ endif ()
 
 set(USE_MINIAUDIO FALSE)
 
+if (APPLE)
+    target_link_libraries(abaddon "-framework CoreFoundation")
+    target_link_libraries(abaddon "-framework CoreAudio")
+    target_link_libraries(abaddon "-framework AudioToolbox")
+endif ()
+
 if (ENABLE_VOICE)
     target_compile_definitions(abaddon PRIVATE WITH_VOICE)
 
@@ -161,12 +162,38 @@ if (ENABLE_VOICE)
 
     target_link_libraries(abaddon ${CMAKE_DL_LIBS})
 
-    if (APPLE)
-        target_link_libraries(abaddon "-framework CoreFoundation")
-        target_link_libraries(abaddon "-framework CoreAudio")
-        target_link_libraries(abaddon "-framework AudioToolbox")
-    endif ()
+    if (ENABLE_RNNOISE)
+        target_compile_definitions(abaddon PRIVATE WITH_RNNOISE)
 
+        find_package(rnnoise QUIET)
+        if (NOT rnnoise_FOUND)
+            message("rnnoise was not found and will be included as a submodule")
+            # This is potentially really stupid
+            add_library(rnnoise STATIC
+                    subprojects/rnnoise/src/arch.h
+                    subprojects/rnnoise/src/celt_lpc.c
+                    subprojects/rnnoise/src/celt_lpc.h
+                    subprojects/rnnoise/src/common.h
+                    subprojects/rnnoise/src/denoise.c
+                    subprojects/rnnoise/src/kiss_fft.c
+                    subprojects/rnnoise/src/kiss_fft.h
+                    subprojects/rnnoise/src/opus_types.h
+                    subprojects/rnnoise/src/pitch.c
+                    subprojects/rnnoise/src/pitch.h
+                    subprojects/rnnoise/src/rnn_data.c
+                    subprojects/rnnoise/src/rnn_data.h
+                    subprojects/rnnoise/src/rnn_reader.c
+                    subprojects/rnnoise/src/rnn.c
+                    subprojects/rnnoise/src/rnn.h
+                    subprojects/rnnoise/src/tansig_table.h
+                    subprojects/rnnoise/src/_kiss_fft_guts.h
+                    subprojects/rnnoise/include/rnnoise.h)
+            target_include_directories(rnnoise PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/subprojects/rnnoise/include")
+            target_link_libraries(abaddon rnnoise)
+        else ()
+            target_link_libraries(abaddon rnnoise::rnnoise)
+        endif ()
+    endif ()
 endif ()
 
 if (${ENABLE_NOTIFICATION_SOUNDS})
@@ -176,10 +203,16 @@ endif ()
 
 if (USE_MINIAUDIO)
     find_path(MINIAUDIO_INCLUDE_DIR
-              NAMES miniaudio.h
-              HINTS subprojects
-              PATH_SUFFIXES miniaudio
-              REQUIRED)
+            NAMES miniaudio.h
+            HINTS subprojects
+            PATH_SUFFIXES miniaudio
+            REQUIRED)
+
     target_include_directories(abaddon PUBLIC ${MINIAUDIO_INCLUDE_DIR})
     target_compile_definitions(abaddon PRIVATE WITH_MINIAUDIO)
 endif ()
+
+set(ABADDON_COMPILER_DEFS "" CACHE STRING "Additional compiler definitions")
+foreach (COMPILER_DEF IN LISTS ABADDON_COMPILER_DEFS)
+    target_compile_definitions(abaddon PRIVATE "${COMPILER_DEF}")
+endforeach ()

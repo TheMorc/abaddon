@@ -1,6 +1,10 @@
+#include "util.hpp"
+
 #include <array>
 #include <cstring>
 #include <filesystem>
+
+#include <gtkmm.h>
 
 void LaunchBrowser(const Glib::ustring &url) {
     GError *err = nullptr;
@@ -160,7 +164,10 @@ std::string GetExtension(std::string url) {
 }
 
 bool IsURLViewableImage(const std::string &url) {
-    const auto ext = GetExtension(url);
+    std::string lw_url = url;
+    std::transform(lw_url.begin(), lw_url.end(), lw_url.begin(), ::tolower);
+
+    const auto ext = GetExtension(lw_url);
     static const char *exts[] = { ".jpeg",
                                   ".jpg",
                                   ".gif",

@@ -1,6 +1,10 @@
 #include "websocket.hpp"
-#include <spdlog/sinks/stdout_color_sinks.h>
+
 #include <utility>
+
+#include <gtkmm/main.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+
 
 Websocket::Websocket(const std::string &id)
     : m_close_info { 1000, "Normal", false } {
@@ -74,7 +78,8 @@ void Websocket::OnMessage(const ix::WebSocketMessagePtr &msg) {
             m_open_dispatcher.emit();
         } break;
         case ix::WebSocketMessageType::Close: {
-            m_log->debug("Received close frame, dispatching. {} ({}){}", msg->closeInfo.code, msg->closeInfo.reason, msg->closeInfo.remote ? " Remote" : "");
+            const auto remote = msg->closeInfo.remote ? " Remote" : "";
+            m_log->debug("Received close frame, dispatching. {} ({}){}", msg->closeInfo.code, msg->closeInfo.reason, remote);
             m_close_info = msg->closeInfo;
             m_close_dispatcher.emit();
         } break;

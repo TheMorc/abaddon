@@ -1,7 +1,11 @@
 #include "discord.hpp"
-#include <spdlog/spdlog.h>
+
 #include <cinttypes>
 #include <utility>
+
+#include <spdlog/spdlog.h>
+
+#include "abaddon.hpp"
 
 using namespace std::string_literals;
 
@@ -24,14 +28,16 @@ DiscordClient::DiscordClient(bool mem_store)
     m_websocket.signal_close().connect(sigc::mem_fun(*this, &DiscordClient::HandleSocketClose));
 
 #ifdef WITH_VOICE
+    // hack: tracking signal objects instead of ensuring m_voice doesnt emit during destruction
     m_voice.signal_connected().connect(sigc::mem_fun(*this, &DiscordClient::OnVoiceConnected));
-    m_voice.signal_disconnected().connect(sigc::mem_fun(*this, &DiscordClient::OnVoiceDisconnected));
+    m_voice.signal_disconnected().connect(sigc::track_obj(sigc::mem_fun(*this, &DiscordClient::OnVoiceDisconnected), m_signal_voice_disconnected));
     m_voice.signal_speaking().connect([this](const VoiceSpeakingData &data) {
         m_signal_voice_speaking.emit(data);
     });
-    m_voice.signal_state_update().connect([this](DiscordVoiceClient::State state) {
+    const auto signal_state_update_cb = [this](DiscordVoiceClient::State state) {
         m_signal_voice_client_state_update.emit(state);
-    });
+    };
+    m_voice.signal_state_update().connect(sigc::track_obj(signal_state_update_cb, m_signal_voice_client_state_update));
 #endif
 
     LoadEventMap();
@@ -261,6 +267,21 @@ Snowflake DiscordClient::GetMemberHoistedRole(Snowflake guild_id, Snowflake user
     return top_role.has_value() ? top_role->ID : Snowflake::Invalid;
 }
 
+std::optional<RoleData> DiscordClient::GetMemberHoistedRoleCached(const GuildMember &member, const std::unordered_map<Snowflake, RoleData> &roles, bool with_color) const {
+    std::optional<RoleData> top_role;
+    for (const auto id : member.Roles) {
+        if (const auto iter = roles.find(id); iter != roles.end()) {
+            const auto &role = iter->second;
+            if ((with_color && role.Color != 0x000000) || (!with_color && role.IsHoisted)) {
+                if (!top_role.has_value() || top_role->Position < role.Position) {
+                    top_role = role;
+                }
+            }
+        }
+    }
+    return top_role;
+}
+
 std::optional<RoleData> DiscordClient::GetMemberHighestRole(Snowflake guild_id, Snowflake user_id) const {
     const auto data = GetMember(user_id, guild_id);
     if (!data.has_value()) return std::nullopt;
@@ -331,6 +352,10 @@ void DiscordClient::GetArchivedPrivateThreads(Snowflake channel_id, const sigc::
 
 std::vector<Snowflake> DiscordClient::GetChildChannelIDs(Snowflake parent_id) const {
     return m_store.GetChannelIDsWithParentID(parent_id);
+}
+
+std::optional<WebhookMessageData> DiscordClient::GetWebhookMessageData(Snowflake message_id) const {
+    return m_store.GetWebhookMessage(message_id);
 }
 
 bool DiscordClient::IsThreadJoined(Snowflake thread_id) const {
@@ -499,6 +524,7 @@ void DiscordClient::SendChatMessageAttachments(const ChatSubmitParams &params, c
     CreateMessageObject obj;
     obj.Content = params.Message;
     obj.Nonce = nonce;
+    obj.Attachments.emplace();
     if (params.Silent) {
         obj.Flags |= MessageFlags::SUPPRESS_NOTIFICATIONS;
     }
@@ -522,11 +548,16 @@ void DiscordClient::SendChatMessageAttachments(const ChatSubmitParams &params, c
         m_generic_dispatch.emit();
     });
     req.make_form();
-    req.add_field("payload_json", nlohmann::json(obj).dump().c_str(), CURL_ZERO_TERMINATED);
+
     for (size_t i = 0; i < params.Attachments.size(); i++) {
+        auto &attachment = params.Attachments.at(i);
         const auto field_name = "files[" + std::to_string(i) + "]";
-        req.add_file(field_name, params.Attachments.at(i).File, params.Attachments.at(i).Filename);
+        req.add_file(field_name, attachment.File, attachment.Filename);
+        obj.Attachments->push_back({ static_cast<int>(i), attachment.Description });
     }
+
+    req.add_field("payload_json", nlohmann::json(obj).dump().c_str(), CURL_ZERO_TERMINATED);
+
     m_http.Execute(std::move(req), [this, params, nonce, callback](const http::response_type &res) {
         for (const auto &attachment : params.Attachments) {
             if (attachment.Type == ChatSubmitParams::AttachmentType::PastedImage) {
@@ -2735,15 +2766,18 @@ void DiscordClient::StoreMessageData(Message &msg) {
         for (const auto &r : *msg.Reactions) {
             if (!r.Emoji.ID.IsValid()) continue;
             const auto cur = m_store.GetEmoji(r.Emoji.ID);
-            if (!cur.has_value())
+            if (!cur.has_value()) {
                 m_store.SetEmoji(r.Emoji.ID, r.Emoji);
+            }
         }
 
-    for (const auto &user : msg.Mentions)
+    for (const auto &user : msg.Mentions) {
         m_store.SetUser(user.ID, user);
+    }
 
-    if (msg.Member.has_value())
+    if (msg.Member.has_value()) {
         m_store.SetGuildMember(*msg.GuildID, msg.Author.ID, *msg.Member);
+    }
 
     if (msg.Interaction.has_value()) {
         m_store.SetUser(msg.Interaction->User.ID, msg.Interaction->User);
@@ -2752,11 +2786,17 @@ void DiscordClient::StoreMessageData(Message &msg) {
         }
     }
 
+    if (msg.IsWebhook()) {
+        m_store.SetWebhookMessage(msg);
+    }
+
     m_store.EndTransaction();
 
-    if (msg.ReferencedMessage.has_value() && msg.MessageReference.has_value() && msg.MessageReference->ChannelID.has_value())
-        if (msg.ReferencedMessage.value() != nullptr)
+    if (msg.ReferencedMessage.has_value() && msg.MessageReference.has_value() && msg.MessageReference->ChannelID.has_value()) {
+        if (msg.ReferencedMessage.value() != nullptr) {
             StoreMessageData(**msg.ReferencedMessage);
+        }
+    }
 }
 
 // some notes for myself
@@ -2766,17 +2806,26 @@ void DiscordClient::StoreMessageData(Message &msg) {
 // no entry.id cannot be a guild even though sometimes it looks like it
 void DiscordClient::HandleReadyReadState(const ReadyEventData &data) {
     for (const auto &guild : data.Guilds) {
-        for (const auto &channel : *guild.Channels)
-            if (channel.LastMessageID.has_value())
-                m_last_message_id[channel.ID] = *channel.LastMessageID;
-        for (const auto &thread : *guild.Threads)
-            if (thread.LastMessageID.has_value())
-                m_last_message_id[thread.ID] = *thread.LastMessageID;
+        if (guild.Channels.has_value()) {
+            for (const auto &channel : *guild.Channels) {
+                if (channel.LastMessageID.has_value()) {
+                    m_last_message_id[channel.ID] = *channel.LastMessageID;
+                }
+            }
+        }
+        if (guild.Threads.has_value()) {
+            for (const auto &thread : *guild.Threads) {
+                if (thread.LastMessageID.has_value()) {
+                    m_last_message_id[thread.ID] = *thread.LastMessageID;
+                }
+            }
+        }
     }
-    for (const auto &channel : data.PrivateChannels)
-        if (channel.LastMessageID.has_value())
+    for (const auto &channel : data.PrivateChannels) {
+        if (channel.LastMessageID.has_value()) {
             m_last_message_id[channel.ID] = *channel.LastMessageID;
-
+        }
+    }
     for (const auto &entry : data.ReadState.Entries) {
         const auto it = m_last_message_id.find(entry.ID);
         if (it == m_last_message_id.end()) continue;

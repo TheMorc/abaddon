@@ -2,16 +2,18 @@
 
 // clang-format off
 
-#include "voicesettingswindow.hpp"
+#include <spdlog/spdlog.h>
+
 #include "abaddon.hpp"
 #include "audio/manager.hpp"
-#include <spdlog/spdlog.h>
+#include "voicesettingswindow.hpp"
 
 // clang-format on
 
 VoiceSettingsWindow::VoiceSettingsWindow()
     : m_main(Gtk::ORIENTATION_VERTICAL) {
     get_style_context()->add_class("app-window");
+    get_style_context()->add_class("voice-settings-window");
     set_default_size(300, 300);
 
     m_encoding_mode.append("Voice");
@@ -35,7 +37,6 @@ VoiceSettingsWindow::VoiceSettingsWindow()
     m_encoding_mode.signal_changed().connect([this]() {
         const auto mode = m_encoding_mode.get_active_text();
         auto &audio = Abaddon::Get().GetAudio();
-        spdlog::get("audio")->debug("Chose encoding mode: {}", mode.c_str());
         if (mode == "Voice") {
             audio.SetEncodingApplication(OPUS_APPLICATION_VOIP);
         } else if (mode == "Music") {
@@ -67,7 +68,6 @@ VoiceSettingsWindow::VoiceSettingsWindow()
     m_signal.signal_changed().connect([this]() {
         const auto signal = m_signal.get_active_text();
         auto &audio = Abaddon::Get().GetAudio();
-        spdlog::get("audio")->debug("Chose signal hint: {}", signal.c_str());
         if (signal == "Auto") {
             audio.SetSignalHint(OPUS_AUTO);
         } else if (signal == "Voice") {
@@ -113,14 +113,28 @@ VoiceSettingsWindow::VoiceSettingsWindow()
     m_gain.set_increments(1.0, 5.0);
     m_gain.set_range(0.0, 6969696969.0);
     m_gain.set_value(Abaddon::Get().GetAudio().GetCaptureGain() * 100.0);
-    m_gain.signal_value_changed().connect([this]() {
+    const auto cb = [this]() {
+        spdlog::get("ui")->warn("emit");
         m_signal_gain.emit(m_gain.get_value() / 100.0);
-    });
+    };
+    // m_gain.signal_value_changed can be fired during destruction. thankfully signals are trackable
+    m_gain.signal_value_changed().connect(sigc::track_obj(cb, *this, m_signal_gain));
 
-    m_main.add(m_encoding_mode);
-    m_main.add(m_signal);
-    m_main.add(m_bitrate);
-    m_main.add(m_gain);
+    auto *layout = Gtk::make_managed<Gtk::HBox>();
+    auto *labels = Gtk::make_managed<Gtk::VBox>();
+    auto *widgets = Gtk::make_managed<Gtk::VBox>();
+    layout->pack_start(*labels, false, true, 5);
+    layout->pack_start(*widgets);
+    labels->pack_start(*Gtk::make_managed<Gtk::Label>("Coding Mode", Gtk::ALIGN_END));
+    labels->pack_start(*Gtk::make_managed<Gtk::Label>("Signal Hint", Gtk::ALIGN_END));
+    labels->pack_start(*Gtk::make_managed<Gtk::Label>("Bitrate", Gtk::ALIGN_END));
+    labels->pack_start(*Gtk::make_managed<Gtk::Label>("Gain", Gtk::ALIGN_END));
+    widgets->pack_start(m_encoding_mode);
+    widgets->pack_start(m_signal);
+    widgets->pack_start(m_bitrate);
+    widgets->pack_start(m_gain);
+
+    m_main.add(*layout);
     add(m_main);
     show_all_children();
 

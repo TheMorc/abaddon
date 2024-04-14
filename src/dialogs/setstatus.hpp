@@ -1,4 +1,9 @@
 #pragma once
+
+#include <gtkmm/comboboxtext.h>
+#include <gtkmm/dialog.h>
+#include <gtkmm/entry.h>
+
 #include "discord/objects.hpp"
 
 class SetStatusDialog : public Gtk::Dialog {
@@ -8,14 +13,12 @@ public:
     PresenceStatus GetStatusType() const;
     std::string GetActivityName() const;
 
-protected:
+private:
     Gtk::Box m_layout;
-    Gtk::Box m_bottom;
     Gtk::Entry m_text;
     Gtk::ComboBoxText m_status_combo;
     Gtk::ComboBoxText m_type_combo;
 
     Gtk::Button m_ok;
     Gtk::Button m_cancel;
-    Gtk::ButtonBox m_bbox;
 };

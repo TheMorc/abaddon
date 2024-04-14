@@ -2,7 +2,16 @@
 ---
 Alternative Discord client made in C++ with GTK
 
-<img src="/.readme/s3.png">
+<table>
+  <tr>
+    <td><img src="/.readme/s5.png"></td>
+    <td><img src="/.readme/s6.png"></td>
+  </tr>
+  <tr>
+    <td><img src="/.readme/s7.png"></td>
+    <td><img src="/.readme/s8.png"></td>
+  </tr>
+</table>
 
 <a href="https://discord.gg/wkCU3vuzG5"><img src="https://discord.com/api/guilds/858156817711890443/widget.png?style=shield"></a>
 
@@ -11,7 +20,7 @@ Current features:
 * Not Electron
 * Voice support
 * Handles most types of chat messages including embeds, images, and replies
-* Completely styleable/customizable with CSS (if you have a system GTK theme it won't really use it though)
+* Completely styleable/customizable
 * Identifies to Discord as the web client unlike other clients so less likely to be falsely flagged as spam<sup>1</sup>
 * Set status
 * Unread and mention indicators
@@ -64,19 +73,21 @@ the result of fundamental issues with Discord's thread implementation.
 3. `mkdir build && cd build`
 4. `cmake -GNinja -DCMAKE_BUILD_TYPE=RelWithDebInfo ..`
 5. `ninja`
+6. [Copy resources](#resources)
 
 #### Mac:
 
 1. `git clone https://github.com/uowuo/abaddon --recurse-submodules="subprojects" && cd abaddon`
-2. `brew install gtkmm3 nlohmann-json libhandy opus libsodium spdlog`
+2. `brew install gtkmm3 nlohmann-json libhandy opus libsodium spdlog adwaita-icon-theme`
 3. `mkdir build && cd build`
 4. `cmake ..`
 5. `make`
+6. [Copy resources](#resources)
 
 #### Linux:
 
 1. Install dependencies
-    * On Ubuntu 20.04 (Focal) and newer:
+    * On Ubuntu 22.04 (Jammy)/Debian 12 (bookworm) and newer:
       ```Shell
       $ sudo apt install g++ cmake libgtkmm-3.0-dev libcurl4-gnutls-dev libsqlite3-dev libssl-dev nlohmann-json3-dev libhandy-1-dev libsecret-1-dev libopus-dev libsodium-dev libspdlog-dev
       ```
@@ -94,6 +105,7 @@ the result of fundamental issues with Discord's thread implementation.
 3. `mkdir build && cd build`
 4. `cmake ..`
 5. `make`
+6. [Copy resources](#resources)
 
 ### Downloads:
 
@@ -105,7 +117,7 @@ Latest release version: https://github.com/uowuo/abaddon/releases/latest
 - MacOS: [here](https://nightly.link/uowuo/abaddon/workflows/ci/master/build-macos-RelWithDebInfo.zip) unsigned,
   unpackaged, requires gtkmm3 (e.g. from homebrew)
 - Linux: [here](https://nightly.link/uowuo/abaddon/workflows/ci/master/build-linux-MinSizeRel.zip) unpackaged (for now),
-  requires gtkmm3. built on Ubuntu 18.04 + gcc9
+  requires gtkmm3. built on Ubuntu 22.04 + gcc9
 
 > **Warning**: If you use Windows, make sure to start from the `bin` directory
 
@@ -151,6 +163,7 @@ spam filter's wrath:
 * [miniaudio](https://miniaud.io/) (optional, provided as submodule, required for voice)
 * [libopus](https://opus-codec.org/) (optional, required for voice)
 * [libsodium](https://doc.libsodium.org/) (optional, required for voice)
+* [rnnoise](https://gitlab.xiph.org/xiph/rnnoise) (optional, provided as submodule, noise suppression and improved VAD)
 
 ### TODO:
 
@@ -159,6 +172,9 @@ spam filter's wrath:
 * A bunch of other stuff probably
 
 ### Styling
+
+<details>
+    <summary>Show all styles</summary>
 
 #### CSS selectors
 
@@ -194,17 +210,7 @@ spam filter's wrath:
 | `.embed-field-title`           | The title of an embed field                                                                       |
 | `.embed-field-value`           | The value of an embed field                                                                       |
 | `.embed-footer`                | The footer of an embed                                                                            |
-| `.members`                     | Container of the member list                                                                      |
-| `.members-row`                 | All rows within the members container                                                             |
-| `.members-row-label`           | All labels in the members container                                                               |
-| `.members-row-member`          | Rows containing a member                                                                          |
-| `.members-row-role`            | Rows containing a role                                                                            |
-| `.members-row-avatar`          | Contains the avatar for a row in the member list                                                  |
-| `.status-indicator`            | The status indicator                                                                              |
-| `.online`                      | Applied to status indicators when the associated user is online                                   |
-| `.idle`                        | Applied to status indicators when the associated user is away                                     |
-| `.dnd`                         | Applied to status indicators when the associated user is on do not disturb                        |
-| `.offline`                     | Applied to status indicators when the associated user is offline                                  |
+| `.member-list`                 | Container of the member list                                                                      |
 | `.typing-indicator`            | The typing indicator (also used for replies)                                                      |
 
 Used in reorderable list implementation:
@@ -254,6 +260,8 @@ Used in profile popup:
 | `.profile-badges`              | Container for badges                                       |
 | `.profile-badge`               |                                                            |
 
+</details>
+
 ### Settings
 
 Settings are configured (for now) by editing `abaddon.ini`.
@@ -267,6 +275,9 @@ The format is similar to the standard Windows ini format **except**:
 This listing is organized by section.
 For example, memory_db would be set by adding `memory_db = true` under the line `[discord]`
 
+<details>
+    <summary>Show all settings</summary>
+
 #### discord
 
 | Setting       | Type    | Default | Description                                                                                      |
@@ -277,6 +288,7 @@ For example, memory_db would be set by adding `memory_db = true` under the line 
 | `token`       | string  |         | Discord token used to login, this can be set from the menu                                       |
 | `prefetch`    | boolean | false   | if true, new messages will cause the avatar and image attachments to be automatically downloaded |
 | `autoconnect` | boolean | false   | autoconnect to discord                                                                           |
+| `keychain`    | boolean | true    | store token in system keychain (if compiled with support)                                        |
 
 #### http
 
@@ -287,29 +299,33 @@ For example, memory_db would be set by adding `memory_db = true` under the line 
 
 #### gui
 
-| Setting                     | Type    | Default | Description                                                                                                                |
-|-----------------------------|---------|---------|----------------------------------------------------------------------------------------------------------------------------|
-| `member_list_discriminator` | boolean | true    | show user discriminators in the member list                                                                                |
-| `stock_emojis`              | boolean | true    | allow abaddon to substitute unicode emojis with images from emojis.bin, must be false to allow GTK to render emojis itself |
-| `custom_emojis`             | boolean | true    | download and use custom Discord emojis                                                                                     |
-| `css`                       | string  |         | path to the main CSS file                                                                                                  |
-| `animations`                | boolean | true    | use animated images where available (e.g. server icons, emojis, avatars). false means static images will be used           |
-| `animated_image_embeds`     | boolean | false   | animate attachments and embeds (GIF files and links)                                                                       |
-| `animated_guild_hover_only` | boolean | true    | only animate guild icons when the guild is being hovered over                                                              |
-| `owner_crown`               | boolean | true    | show a crown next to the owner                                                                                             |
-| `unreads`                   | boolean | true    | show unread indicators and mention badges                                                                                  |
-| `save_state`                | boolean | true    | save the state of the gui (active channels, tabs, expanded channels)                                                       |
-| `alt_menu`                  | boolean | false   | keep the menu hidden unless revealed with alt key                                                                          |
-| `hide_to_tray`              | boolean | false   | hide abaddon to the system tray on window close                                                                            |
+| Setting                        | Type    | Default | Description                                                                                                                |
+|--------------------------------|---------|---------|----------------------------------------------------------------------------------------------------------------------------|
+| `member_list_discriminator`    | boolean | true    | show user discriminators in the member list                                                                                |
+| `stock_emojis`                 | boolean | true    | allow abaddon to substitute unicode emojis with images from emojis.bin, must be false to allow GTK to render emojis itself |
+| `custom_emojis`                | boolean | true    | download and use custom Discord emojis                                                                                     |
+| `css`                          | string  |         | path to the main CSS file                                                                                                  |
+| `animations`                   | boolean | true    | use animated images where available (e.g. server icons, emojis, avatars). false means static images will be used           |
+| `animated_guild_hover_only`    | boolean | true    | only animate guild icons when the guild is being hovered over                                                              |
+| `owner_crown`                  | boolean | true    | show a crown next to the owner                                                                                             |
+| `unreads`                      | boolean | true    | show unread indicators and mention badges                                                                                  |
+| `save_state`                   | boolean | true    | save the state of the gui (active channels, tabs, expanded channels)                                                       |
+| `alt_menu`                     | boolean | false   | keep the menu hidden unless revealed with alt key                                                                          |
+| `hide_to_tray`                 | boolean | false   | hide abaddon to the system tray on window close                                                                            |
+| `show_deleted_indicator`       | boolean | true    | show \[deleted\] indicator next to deleted messages instead of actually deleting the message                               |
+| `font_scale`                   | double  |         | scale font rendering. 1 is unchanged                                                                                       |
+| `image_embed_clamp_width`      | int     | 400     | maximum width of image embeds                                                                                              |
+| `image_embed_clamp_height`     | int     | 300     | maximum height of image embeds                                                                                             |
+| `classic_channels`             | boolean | false   | use classic Discord-style interface for server/channel listing                                                             |
+| `classic_change_guild_on_open` | boolean | true    | change displayed guild when selecting a channel (classic channel list)                                                     |
+
 
 #### style
 
 | Setting                 | Type   | Description                                         |
 |-------------------------|--------|-----------------------------------------------------|
-| `linkcolor`             | string | color to use for links in messages                  |
 | `expandercolor`         | string | color to use for the expander in the channel list   |
 | `nsfwchannelcolor`      | string | color to use for NSFW channels in the channel list  |
-| `channelcolor`          | string | color to use for SFW channels in the channel list   |
 | `mentionbadgecolor`     | string | background color for mention badges                 |
 | `mentionbadgetextcolor` | string | color to use for number displayed on mention badges |
 | `unreadcolor`           | string | color to use for the unread indicator               |
@@ -321,9 +337,24 @@ For example, memory_db would be set by adding `memory_db = true` under the line 
 | `enabled`   | boolean | true (if not on Windows) | Enable desktop notifications                                                  |
 | `playsound` | boolean | true                     | Enable notification sounds. Requires ENABLE_NOTIFICATION_SOUNDS=TRUE in CMake |
 
+#### voice
+
+| Setting    | Type   | Default                            | Description                                                                                                                |
+|------------|--------|------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `vad`      | string | rnnoise if enabled, gate otherwise | Method used for voice activity detection. Changeable in UI                                                                 |
+| `backends` | string | empty                              | Change backend priority when initializing miniaudio: `wasapi;dsound;winmm;coreaudio;sndio;audio4;oss;pulseaudio;alsa;jack` |
+
+#### windows
+
+| Setting       | Type    | Default | Description             |
+|---------------|---------|---------|-------------------------|
+| `hideconsole` | boolean | true    | Hide console on startup |
+
 ### Environment variables
 
 | variable         | Description                                                                  |
 |------------------|------------------------------------------------------------------------------|
 | `ABADDON_NO_FC`  | (Windows only) don't use custom font config                                  |
 | `ABADDON_CONFIG` | change path of configuration file to use. relative to cwd or can be absolute |
+
+</details>

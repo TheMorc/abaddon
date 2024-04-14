@@ -1,6 +1,11 @@
 #include "chatinput.hpp"
-#include "constants.hpp"
 #include <filesystem>
+#include <gtkmm/dialog.h>
+#include <gtkmm/filechoosernative.h>
+#include "abaddon.hpp"
+#include "constants.hpp"
+#include "misc/events.hpp"
+#include "util.hpp"
 
 ChatInputText::ChatInputText() {
     get_style_context()->add_class("message-input");
@@ -19,7 +24,7 @@ ChatInputText::ChatInputText() {
     m_textview.signal_key_press_event().connect(cb, false);
     m_textview.set_hexpand(false);
     m_textview.set_halign(Gtk::ALIGN_FILL);
-    m_textview.set_valign(Gtk::ALIGN_CENTER);
+    m_textview.set_valign(Gtk::ALIGN_FILL);
     m_textview.set_wrap_mode(Gtk::WRAP_WORD_CHAR);
     m_textview.show();
     add(m_textview);
@@ -41,12 +46,14 @@ bool ChatInputText::ProcessKeyPress(GdkEventKey *event) {
         return true;
     }
 
+    const auto shortcut = EventsUtil::shortcut_key(event);
+
 #ifdef __APPLE__
-    if ((event->state & GDK_MOD2_MASK) && event->keyval == GDK_KEY_v) {
+    if ((event->state & GDK_MOD2_MASK) && shortcut == GDK_KEY_v) {
         return CheckHandleClipboardPaste();
     }
 #else
-    if ((event->state & GDK_CONTROL_MASK) && event->keyval == GDK_KEY_v) {
+    if ((event->state & GDK_CONTROL_MASK) && shortcut == GDK_KEY_v) {
         return CheckHandleClipboardPaste();
     }
 #endif
@@ -110,30 +117,25 @@ ChatInputTextContainer::ChatInputTextContainer() {
     };
     m_input.signal_key_press_proxy().connect(cb);
 
+    m_upload_button.set_image(m_upload_img);
+    m_upload_button.set_halign(Gtk::ALIGN_CENTER);
+    m_upload_button.set_valign(Gtk::ALIGN_CENTER);
+    m_upload_button.get_style_context()->add_class(GTK_STYLE_CLASS_FLAT);
+
     m_upload_img.property_icon_name() = "document-send-symbolic";
     m_upload_img.property_icon_size() = Gtk::ICON_SIZE_LARGE_TOOLBAR;
     m_upload_img.get_style_context()->add_class("message-input-browse-icon");
 
-    AddPointerCursor(m_upload_ev);
-
-    m_upload_ev.signal_button_press_event().connect([this](GdkEventButton *ev) -> bool {
-        if (ev->button == GDK_BUTTON_PRIMARY) {
-            ShowFileChooser();
-            // return focus
-            m_input.grab_focus();
-            return true;
-        }
-        return false;
+    m_upload_button.signal_clicked().connect([this]() {
+        ShowFileChooser();
+        m_input.grab_focus();
     });
 
-    m_upload_ev.add(m_upload_img);
-    add_overlay(m_upload_ev);
-    add(m_input);
+    m_upload_box.pack_start(m_upload_button);
+    pack_start(m_upload_box, false, false);
+    pack_start(m_input);
 
     show_all_children();
-
-    // stop the overlay from using (start) padding
-    signal_get_child_position().connect(sigc::mem_fun(*this, &ChatInputTextContainer::GetChildPosition), false);
 }
 
 void ChatInputTextContainer::ShowFileChooser() {
@@ -149,11 +151,6 @@ void ChatInputTextContainer::ShowFileChooser() {
         }
     });
 
-    auto filter_all = Gtk::FileFilter::create();
-    filter_all->set_name("All files (*.*)");
-    filter_all->add_pattern("*.*");
-    dlg->add_filter(filter_all);
-
     dlg->run();
 }
 
@@ -162,39 +159,11 @@ ChatInputText &ChatInputTextContainer::Get() {
 }
 
 void ChatInputTextContainer::ShowChooserIcon() {
-    m_upload_ev.show();
+    m_upload_button.show();
 }
 
 void ChatInputTextContainer::HideChooserIcon() {
-    m_upload_ev.hide();
-}
-
-bool ChatInputTextContainer::GetChildPosition(Gtk::Widget *child, Gdk::Rectangle &pos) {
-    Gtk::Allocation main_alloc;
-    {
-        auto *grandchild = m_input.get_child();
-        int x, y;
-        if (grandchild->translate_coordinates(m_input, 0, 0, x, y)) {
-            main_alloc.set_x(x);
-            main_alloc.set_y(y);
-        } else {
-            main_alloc.set_x(0);
-            main_alloc.set_y(0);
-        }
-        main_alloc.set_width(grandchild->get_allocated_width());
-        main_alloc.set_height(grandchild->get_allocated_height());
-    }
-
-    Gtk::Requisition min, req;
-    child->get_preferred_size(min, req);
-
-    // let css move it around
-    pos.set_x(0);
-    pos.set_y(0);
-    pos.set_width(std::max(min.width, std::min(main_alloc.get_width(), req.width)));
-    pos.set_height(std::max(min.height, std::min(main_alloc.get_height(), req.height)));
-
-    return true;
+    m_upload_button.hide();
 }
 
 ChatInputTextContainer::type_signal_add_attachment ChatInputTextContainer::signal_add_attachment() {
@@ -297,7 +266,7 @@ std::vector<ChatSubmitParams::Attachment> ChatInputAttachmentContainer::GetAttac
     for (auto *x : m_attachments) {
         if (!x->GetFile()->query_exists())
             puts("bad!");
-        ret.push_back({ x->GetFile(), x->GetType(), x->GetFilename() });
+        ret.push_back({ x->GetFile(), x->GetType(), x->GetFilename(), x->GetDescription() });
     }
     return ret;
 }
@@ -345,6 +314,7 @@ ChatInputAttachmentItem::ChatInputAttachmentItem(const Glib::RefPtr<Gio::File> &
     , m_img(Gtk::make_managed<Gtk::Image>())
     , m_type(is_extant ? ChatSubmitParams::ExtantFile : ChatSubmitParams::PastedImage)
     , m_filename("unknown.png")
+    , m_is_image(true)
     , m_label("unknown.png")
     , m_box(Gtk::ORIENTATION_VERTICAL) {
     get_style_context()->add_class("attachment-item");
@@ -391,8 +361,16 @@ std::string ChatInputAttachmentItem::GetFilename() const {
     return m_filename;
 }
 
+std::optional<std::string> ChatInputAttachmentItem::GetDescription() const {
+    return m_description.empty() ? std::nullopt : std::optional<std::string>(m_description);
+}
+
 bool ChatInputAttachmentItem::IsTemp() const noexcept {
     return m_type == ChatSubmitParams::PastedImage;
+}
+
+bool ChatInputAttachmentItem::IsImage() const noexcept {
+    return m_is_image;
 }
 
 void ChatInputAttachmentItem::RemoveIfTemp() {
@@ -422,12 +400,22 @@ void ChatInputAttachmentItem::SetupMenu() {
         }
     });
 
+    m_menu_set_alt_text.set_label("Change Alt-Text");
+    m_menu_set_alt_text.signal_activate().connect([this]() {
+        const auto description = Abaddon::Get().ShowTextPrompt("Enter description (alt-text) for attachment", "Enter alt-text", m_description);
+        if (description.has_value()) {
+            m_description = *description;
+        }
+    });
+
     m_menu.add(m_menu_set_filename);
+    m_menu.add(m_menu_set_alt_text);
     m_menu.add(m_menu_remove);
     m_menu.show_all();
 
     signal_button_press_event().connect([this](GdkEventButton *ev) -> bool {
         if (ev->button == GDK_BUTTON_SECONDARY) {
+            m_menu_set_alt_text.set_visible(IsImage());
             m_menu.popup_at_pointer(reinterpret_cast<GdkEvent *>(ev));
             return true;
         }

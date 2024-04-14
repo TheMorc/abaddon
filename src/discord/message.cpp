@@ -1,5 +1,7 @@
 #include "message.hpp"
 
+#include "abaddon.hpp"
+
 void to_json(nlohmann::json &j, const EmbedFooterData &m) {
     j["text"] = m.Text;
     JS_IF("icon_url", m.IconURL);
@@ -128,6 +130,7 @@ void to_json(nlohmann::json &j, const AttachmentData &m) {
     j["proxy_url"] = m.ProxyURL;
     JS_IF("height", m.Height);
     JS_IF("width", m.Width);
+    JS_IF("description", m.Description);
 }
 
 void from_json(const nlohmann::json &j, AttachmentData &m) {
@@ -138,6 +141,7 @@ void from_json(const nlohmann::json &j, AttachmentData &m) {
     JS_D("proxy_url", m.ProxyURL);
     JS_ON("height", m.Height);
     JS_ON("width", m.Width);
+    JS_ON("description", m.Description);
 }
 
 void from_json(const nlohmann::json &j, MessageReferenceData &m) {
@@ -282,4 +286,12 @@ bool Message::DoesMention(Snowflake id) const noexcept {
     const auto member = Abaddon::Get().GetDiscordClient().GetMember(id, *GuildID);
     if (!member.has_value()) return false;
     return std::find_first_of(MentionRoles.begin(), MentionRoles.end(), member->Roles.begin(), member->Roles.end()) != MentionRoles.end();
+}
+
+bool Message::IsWebhook() const noexcept {
+    return WebhookID.has_value();
+}
+
+std::optional<WebhookMessageData> Message::GetWebhookData() const {
+    return Abaddon::Get().GetDiscordClient().GetWebhookMessageData(ID);
 }

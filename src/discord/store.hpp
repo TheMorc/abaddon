@@ -7,10 +7,13 @@
 #include <sqlite3.h>
 
 #ifdef GetMessage // fuck you windows.h
-    #undef GetMessage
+#undef GetMessage
 #endif
 
 class Store {
+private:
+    class Statement;
+
 public:
     Store(bool mem_store = false);
     ~Store();
@@ -26,6 +29,7 @@ public:
     void SetPermissionOverwrite(Snowflake channel_id, Snowflake id, const PermissionOverwrite &perm);
     void SetEmoji(Snowflake id, const EmojiData &emoji);
     void SetBan(Snowflake guild_id, Snowflake user_id, const BanData &ban);
+    void SetWebhookMessage(const Message &message);
 
     std::optional<ChannelData> GetChannel(Snowflake id) const;
     std::optional<EmojiData> GetEmoji(Snowflake id) const;
@@ -37,6 +41,7 @@ public:
     std::optional<UserData> GetUser(Snowflake id) const;
     std::optional<BanData> GetBan(Snowflake guild_id, Snowflake user_id) const;
     std::vector<BanData> GetBans(Snowflake guild_id) const;
+    std::optional<WebhookMessageData> GetWebhookMessage(Snowflake message_id) const;
 
     Snowflake GetGuildOwner(Snowflake guild_id) const;
     std::vector<Snowflake> GetMemberRoles(Snowflake guild_id, Snowflake user_id) const;
@@ -48,6 +53,36 @@ public:
     std::vector<Snowflake> GetChannelIDsWithParentID(Snowflake channel_id) const;
     std::unordered_set<Snowflake> GetMembersInGuild(Snowflake guild_id) const;
     // ^ not the same as GetUsersInGuild since users in a guild may include users who do not have retrieved member data
+
+    template<typename Iter>
+    std::vector<UserData> GetUsersBulk(Iter begin, Iter end) {
+        const int size = std::distance(begin, end);
+        if (size == 0) return {};
+
+        std::string query = "SELECT * FROM USERS WHERE id IN (";
+        for (int i = 0; i < size; i++) {
+            query += "?, ";
+        }
+        query.resize(query.size() - 2); // chop off extra ", "
+        query += ")";
+
+        Statement s(m_db, query.c_str());
+        if (!s.OK()) {
+            printf("failed to prepare bulk users: %s\n", m_db.ErrStr());
+            return {};
+        }
+
+        for (int i = 0; begin != end; i++, begin++) {
+            s.Bind(i, *begin);
+        }
+
+        std::vector<UserData> r;
+        r.reserve(size);
+        while (s.FetchOne()) {
+            r.push_back(GetUserBound(&s));
+        }
+        return r;
+    }
 
     void AddReaction(const MessageReactionAddObject &data, bool byself);
     void RemoveReaction(const MessageReactionRemoveObject &data, bool byself);
@@ -67,7 +102,6 @@ public:
     void EndTransaction();
 
 private:
-    class Statement;
     class Database {
     public:
         Database(const char *path);
@@ -87,13 +121,7 @@ private:
         sqlite3 *m_db;
         int m_err = SQLITE_OK;
         mutable char m_err_scratch[256] { 0 };
-
-        // stupid shit i dont like to allow closing properly
-        using type_signal_close = sigc::signal<void>;
-        type_signal_close m_signal_close;
-
-    public:
-        type_signal_close signal_close();
+        std::filesystem::path m_db_path;
     };
 
     class Statement {
@@ -240,6 +268,7 @@ private:
         sqlite3_stmt *m_stmt;
     };
 
+    UserData GetUserBound(Statement *stmt) const;
     Message GetMessageBound(std::unique_ptr<Statement> &stmt) const;
     static RoleData GetRoleBound(std::unique_ptr<Statement> &stmt);
 
@@ -313,5 +342,7 @@ private:
     STMT(get_guild_member_ids);
     STMT(clr_role);
     STMT(get_guild_owner);
+    STMT(set_webhook_msg);
+    STMT(get_webhook_msg);
 #undef STMT
 };

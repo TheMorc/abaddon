@@ -1,9 +1,11 @@
+#include "abaddon.hpp"
 #include <memory>
 #include <spdlog/spdlog.h>
 #include <spdlog/cfg/env.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <string>
 #include <algorithm>
+#include <gtkmm.h>
 #include "platform.hpp"
 #include "audio/manager.hpp"
 #include "discord/discord.hpp"
@@ -21,19 +23,41 @@
 #include "startup.hpp"
 #include "notifications/notifications.hpp"
 #include "remoteauth/remoteauthdialog.hpp"
+#include "util.hpp"
+
+#if defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
+
+void macOSThemeChanged() {
+    CFPropertyListRef appearanceName = CFPreferencesCopyAppValue(CFSTR("AppleInterfaceStyle"), kCFPreferencesAnyApplication);
+    if (appearanceName != NULL && CFGetTypeID(appearanceName) == CFStringGetTypeID() && CFStringCompare((CFStringRef)appearanceName, CFSTR("Dark"), 0) == kCFCompareEqualTo) {
+        Gtk::Settings::get_default()->set_property("gtk-application-prefer-dark-theme", true);
+    } else {
+        Gtk::Settings::get_default()->set_property("gtk-application-prefer-dark-theme", false);
+    }
+}
+
+void macOSThemeChangedCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    macOSThemeChanged();
+}
+#endif
 
 #ifdef WITH_LIBHANDY
-    #include <handy.h>
+#include <handy.h>
 #endif
 
 #ifdef _WIN32
-    #pragma comment(lib, "crypt32.lib")
+#pragma comment(lib, "crypt32.lib")
 #endif
 
 Abaddon::Abaddon()
     : m_settings(Platform::FindConfigFile())
     , m_discord(GetSettings().UseMemoryDB) // stupid but easy
-    , m_emojis(GetResPath("/emojis.bin")) {
+    , m_emojis(GetResPath("/emojis.db"))
+#ifdef WITH_VOICE
+    , m_audio(GetSettings().Backends)
+#endif
+{
     LoadFromSettings();
 
     // todo: set user agent for non-client(?)
@@ -67,7 +91,7 @@ Abaddon::Abaddon()
         if (!accessible)
             m_channels_requested.erase(id);
     });
-    if (GetSettings().Prefetch)
+    if (GetSettings().Prefetch) {
         m_discord.signal_message_create().connect([this](const Message &message) {
             if (message.Author.HasAvatar())
                 m_img_mgr.Prefetch(message.Author.GetAvatarURL());
@@ -76,6 +100,11 @@ Abaddon::Abaddon()
                     m_img_mgr.Prefetch(attachment.ProxyURL);
             }
         });
+    }
+
+#ifdef WITH_VOICE
+    m_audio.SetVADMethod(GetSettings().VAD);
+#endif
 }
 
 Abaddon &Abaddon::Get() {
@@ -172,6 +201,7 @@ static void MainEventHandler(GdkEvent *event, void *main_window) {
 
 int Abaddon::StartGTK() {
     m_gtk_app = Gtk::Application::create("com.github.uowuo.abaddon");
+    Glib::set_application_name(APP_TITLE);
 
 #ifdef WITH_LIBHANDY
     m_gtk_app->signal_activate().connect([] {
@@ -182,13 +212,6 @@ int Abaddon::StartGTK() {
     m_css_provider = Gtk::CssProvider::create();
     m_css_provider->signal_parsing_error().connect([](const Glib::RefPtr<const Gtk::CssSection> &section, const Glib::Error &error) {
         Gtk::MessageDialog dlg("css failed parsing (" + error.what() + ")", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
-        dlg.set_position(Gtk::WIN_POS_CENTER);
-        dlg.run();
-    });
-
-    m_css_low_provider = Gtk::CssProvider::create();
-    m_css_low_provider->signal_parsing_error().connect([](const Glib::RefPtr<const Gtk::CssSection> &section, const Glib::Error &error) {
-        Gtk::MessageDialog dlg("low-priority css failed parsing (" + error.what() + ")", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
         dlg.set_position(Gtk::WIN_POS_CENTER);
         dlg.run();
     });
@@ -248,7 +271,6 @@ int Abaddon::StartGTK() {
         Gtk::MessageDialog dlg(*m_main_window, "The audio engine could not be initialized!", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
         dlg.set_position(Gtk::WIN_POS_CENTER);
         dlg.run();
-        return 1;
     }
 #endif
 
@@ -257,6 +279,13 @@ int Abaddon::StartGTK() {
         ShowWindow(GetConsoleWindow(), SW_HIDE);
     }
 #endif
+
+    if (m_settings.GetSettings().FontScale > 0.0) {
+        auto dpi = Gdk::Screen::get_default()->get_resolution();
+        if (dpi < 0.0) dpi = 96.0;
+        auto newdpi = dpi * 1024.0 * m_settings.GetSettings().FontScale;
+        Gtk::Settings::get_default()->set_property("gtk-xft-dpi", newdpi);
+    }
 
     // store must be checked before this can be called
     m_main_window->UpdateComponents();
@@ -322,6 +351,17 @@ int Abaddon::StartGTK() {
 
     m_gtk_app->hold();
     m_main_window->show();
+
+#if defined(__APPLE__)
+    CFNotificationCenterAddObserver(CFNotificationCenterGetDistributedCenter(),
+                                    NULL,
+                                    macOSThemeChangedCallback,
+                                    CFSTR("AppleInterfaceThemeChangedNotification"),
+                                    NULL,
+                                    CFNotificationSuspensionBehaviorCoalesce);
+
+    macOSThemeChanged();
+#endif
 
     RunFirstTimeDiscordStartup();
 
@@ -473,14 +513,6 @@ void Abaddon::ShowVoiceWindow() {
     wnd->signal_deafen().connect([this](bool is_deaf) {
         m_discord.SetVoiceDeafened(is_deaf);
         m_audio.SetPlayback(!is_deaf);
-    });
-
-    wnd->signal_gate().connect([this](double gate) {
-        m_audio.SetCaptureGate(gate);
-    });
-
-    wnd->signal_gain().connect([this](double gain) {
-        m_audio.SetCaptureGain(gain);
     });
 
     wnd->signal_mute_user_cs().connect([this](Snowflake id, bool is_mute) {
@@ -1082,10 +1114,6 @@ void Abaddon::ActionReloadCSS() {
         Gtk::StyleContext::remove_provider_for_screen(Gdk::Screen::get_default(), m_css_provider);
         m_css_provider->load_from_path(GetCSSPath("/" + GetSettings().MainCSS));
         Gtk::StyleContext::add_provider_for_screen(Gdk::Screen::get_default(), m_css_provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-
-        Gtk::StyleContext::remove_provider_for_screen(Gdk::Screen::get_default(), m_css_low_provider);
-        m_css_low_provider->load_from_path(GetCSSPath("/application-low-priority.css"));
-        Gtk::StyleContext::add_provider_for_screen(Gdk::Screen::get_default(), m_css_low_provider, GTK_STYLE_PROVIDER_PRIORITY_APPLICATION - 1);
     } catch (Glib::Error &e) {
         Gtk::MessageDialog dlg(*m_main_window, "css failed to load (" + e.what() + ")", false, Gtk::MESSAGE_ERROR, Gtk::BUTTONS_OK, true);
         dlg.set_position(Gtk::WIN_POS_CENTER);

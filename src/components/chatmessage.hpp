@@ -1,4 +1,10 @@
 #pragma once
+#include <gdkmm/pixbufanimation.h>
+#include <gtkmm/box.h>
+#include <gtkmm/eventbox.h>
+#include <gtkmm/image.h>
+#include <gtkmm/listboxrow.h>
+#include <gtkmm/textview.h>
 #include "discord/discord.hpp"
 
 class ChatMessageItemContainer : public Gtk::EventBox {
@@ -84,7 +90,6 @@ public:
 
 protected:
     void AttachUserMenuHandler(Gtk::Widget &widget);
-    static Glib::ustring GetEscapedDisplayName(const UserData &user, const std::optional<GuildMember> &member);
 
     bool on_author_button_press(GdkEventButton *ev);
 

@@ -1,4 +1,5 @@
 #include "chatlist.hpp"
+#include "abaddon.hpp"
 #include "chatmessage.hpp"
 #include "constants.hpp"
 
@@ -67,8 +68,22 @@ void ChatList::ProcessNewMessage(const Message &data, bool prepend) {
 
         if (last_row != nullptr) {
             const uint64_t diff = std::max(data.ID, last_row->NewestID) - std::min(data.ID, last_row->NewestID);
-            if (last_row->UserID == data.Author.ID && (prepend || (diff < SnowflakeSplitDifference * Snowflake::SecondsInterval)))
+            if (last_row->UserID == data.Author.ID && (prepend || (diff < SnowflakeSplitDifference * Snowflake::SecondsInterval))) {
                 should_attach = true;
+            }
+            // Separate webhooks if the usernames or avatar URLs are different
+            if (data.IsWebhook() && last_row->UserID == data.Author.ID) {
+                const auto last_message = discord.GetMessage(last_row->NewestID);
+                if (last_message.has_value() && last_message->IsWebhook()) {
+                    const auto last_webhook_data = last_message->GetWebhookData();
+                    const auto next_webhook_data = data.GetWebhookData();
+                    if (last_webhook_data.has_value() && next_webhook_data.has_value()) {
+                        if (last_webhook_data->Username != next_webhook_data->Username || last_webhook_data->Avatar != next_webhook_data->Avatar) {
+                            should_attach = false;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -173,8 +188,15 @@ void ChatList::DeleteMessage(Snowflake id) {
     if (widget == m_id_to_widget.end()) return;
 
     auto *x = dynamic_cast<ChatMessageItemContainer *>(widget->second);
-    if (x != nullptr)
-        x->UpdateAttributes();
+
+    if (x != nullptr) {
+        if (Abaddon::Get().GetSettings().ShowDeletedIndicator) {
+            x->UpdateAttributes();
+        } else {
+            RemoveMessageAndHeader(x);
+            m_id_to_widget.erase(id);
+        }
+    }
 }
 
 void ChatList::RefetchMessage(Snowflake id) {

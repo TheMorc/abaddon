@@ -27,18 +27,7 @@ Store::Store(bool mem_store)
     m_ok &= CreateStatements();
 }
 
-Store::~Store() {
-    m_db.Close();
-    if (!m_db.OK()) {
-        fprintf(stderr, "error closing database: %s\n", m_db.ErrStr());
-        return;
-    }
-
-    if (m_db_path != ":memory:") {
-        std::error_code ec;
-        std::filesystem::remove(m_db_path, ec);
-    }
-}
+Store::~Store() {}
 
 bool Store::IsValid() const {
     return m_db.OK() && m_ok;
@@ -53,6 +42,20 @@ void Store::SetBan(Snowflake guild_id, Snowflake user_id, const BanData &ban) {
 
     if (!s->Insert())
         fprintf(stderr, "ban insert failed for %" PRIu64 "/%" PRIu64 ": %s\n", static_cast<uint64_t>(guild_id), static_cast<uint64_t>(user_id), m_db.ErrStr());
+
+    s->Reset();
+}
+
+void Store::SetWebhookMessage(const Message &message) {
+    auto &s = m_stmt_set_webhook_msg;
+
+    s->Bind(1, message.ID);
+    s->Bind(2, message.WebhookID);
+    s->Bind(3, message.Author.Username);
+    s->Bind(4, message.Author.Avatar);
+
+    if (!s->Insert())
+        fprintf(stderr, "webhook message insert failed for %" PRIu64 ": %s\n", static_cast<uint64_t>(message.ID), m_db.ErrStr());
 
     s->Reset();
 }
@@ -365,6 +368,7 @@ void Store::SetMessage(Snowflake id, const Message &message) {
         s->Bind(6, a.ProxyURL);
         s->Bind(7, a.Height);
         s->Bind(8, a.Width);
+        s->Bind(9, a.Description);
         if (!s->Insert())
             fprintf(stderr, "message attachment insert failed for %" PRIu64 "/%" PRIu64 ": %s\n", static_cast<uint64_t>(id), static_cast<uint64_t>(a.ID), m_db.ErrStr());
         s->Reset();
@@ -481,6 +485,28 @@ std::vector<BanData> Store::GetBans(Snowflake guild_id) const {
     s->Reset();
 
     return ret;
+}
+
+std::optional<WebhookMessageData> Store::GetWebhookMessage(Snowflake message_id) const {
+    auto &s = m_stmt_get_webhook_msg;
+
+    s->Bind(1, message_id);
+    if (!s->FetchOne()) {
+        if (m_db.Error() != SQLITE_DONE)
+            fprintf(stderr, "error while fetching webhook message %" PRIu64 ": %s\n", static_cast<uint64_t>(message_id), m_db.ErrStr());
+        s->Reset();
+        return {};
+    }
+
+    WebhookMessageData data;
+    s->Get(0, data.MessageID);
+    s->Get(1, data.WebhookID);
+    s->Get(2, data.Username);
+    s->Get(3, data.Avatar);
+
+    s->Reset();
+
+    return data;
 }
 
 Snowflake Store::GetGuildOwner(Snowflake guild_id) const {
@@ -924,6 +950,21 @@ std::optional<Message> Store::GetMessage(Snowflake id) const {
     return top;
 }
 
+UserData Store::GetUserBound(Statement *stmt) const {
+    UserData u;
+    stmt->Get(0, u.ID);
+    stmt->Get(1, u.Username);
+    stmt->Get(2, u.Discriminator);
+    stmt->Get(3, u.Avatar);
+    stmt->Get(4, u.IsBot);
+    stmt->Get(5, u.IsSystem);
+    stmt->Get(6, u.IsMFAEnabled);
+    stmt->Get(7, u.PremiumType);
+    stmt->Get(8, u.PublicFlags);
+    stmt->Get(9, u.GlobalName);
+    return u;
+}
+
 Message Store::GetMessageBound(std::unique_ptr<Statement> &s) const {
     Message r;
 
@@ -935,7 +976,7 @@ Message Store::GetMessageBound(std::unique_ptr<Statement> &s) const {
     s->Get(5, r.Timestamp);
     s->Get(6, r.EditedTimestamp);
     // s->Get(7, r.IsTTS);
-    // s->Get(8, r.DoesMentionEveryone);
+    s->Get(8, r.DoesMentionEveryone);
     s->GetJSON(9, r.Embeds);
     s->Get(10, r.IsPinned);
     s->Get(11, r.WebhookID);
@@ -981,6 +1022,7 @@ Message Store::GetMessageBound(std::unique_ptr<Statement> &s) const {
             s->Get(5, q.ProxyURL);
             s->Get(6, q.Height);
             s->Get(7, q.Width);
+            s->Get(8, q.Description);
         }
         s->Reset();
     }
@@ -1016,11 +1058,12 @@ Message Store::GetMessageBound(std::unique_ptr<Statement> &s) const {
         while (s->FetchOne()) {
             size_t idx;
             ReactionData q;
-            s->Get(0, q.Emoji.ID);
-            s->Get(1, q.Emoji.Name);
-            s->Get(2, q.Count);
-            s->Get(3, q.HasReactedWith);
-            s->Get(4, idx);
+            s->Get(0, q.Count);
+            s->Get(1, q.HasReactedWith);
+            s->Get(2, idx);
+            s->Get(3, q.Emoji.ID);
+            s->Get(4, q.Emoji.Name);
+            s->Get(5, q.Emoji.IsAnimated);
             tmp[idx] = q;
         }
         s->Reset();
@@ -1100,18 +1143,7 @@ std::optional<UserData> Store::GetUser(Snowflake id) const {
         return {};
     }
 
-    UserData r;
-
-    r.ID = id;
-    s->Get(1, r.Username);
-    s->Get(2, r.Discriminator);
-    s->Get(3, r.Avatar);
-    s->Get(4, r.IsBot);
-    s->Get(5, r.IsSystem);
-    s->Get(6, r.IsMFAEnabled);
-    s->Get(7, r.PremiumType);
-    s->Get(8, r.PublicFlags);
-    s->Get(9, r.GlobalName);
+    auto r = GetUserBound(s.get());
 
     s->Reset();
 
@@ -1479,6 +1511,7 @@ bool Store::CreateTables() {
             proxy TEXT NOT NULL,
             height INTEGER,
             width INTEGER,
+            description TEXT,
             PRIMARY KEY(message, id)
         )
     )";
@@ -1500,6 +1533,15 @@ bool Store::CreateTables() {
             me BOOL NOT NULL,
             idx INTEGER NOT NULL,
             PRIMARY KEY(message, emoji_id, name)
+        )
+    )";
+
+    const char *create_webhook_messages = R"(
+        CREATE TABLE IF NOT EXISTS webhook_messages (
+            message_id INTEGER NOT NULL,
+            webhook_id INTEGER NOT NULL,
+            username TEXT,
+            avatar TEXT
         )
     )";
 
@@ -1605,6 +1647,11 @@ bool Store::CreateTables() {
 
     if (m_db.Execute(create_reactions) != SQLITE_OK) {
         fprintf(stderr, "failed to create reactions table: %s\n", m_db.ErrStr());
+        return false;
+    }
+
+    if (m_db.Execute(create_webhook_messages) != SQLITE_OK) {
+        fprintf(stderr, "failed to create webhook messages table: %s\n", m_db.ErrStr());
         return false;
     }
 
@@ -2168,7 +2215,7 @@ bool Store::CreateStatements() {
 
     m_stmt_set_attachment = std::make_unique<Statement>(m_db, R"(
         REPLACE INTO attachments VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
     )");
     if (!m_stmt_set_attachment->OK()) {
@@ -2248,7 +2295,19 @@ bool Store::CreateStatements() {
     }
 
     m_stmt_get_reactions = std::make_unique<Statement>(m_db, R"(
-        SELECT emoji_id, name, count, me, idx FROM reactions WHERE message = ?
+        SELECT
+            reactions.count,
+            reactions.me,
+            reactions.idx,
+            emojis.id,
+            emojis.name,
+            emojis.animated
+        FROM
+            reactions
+        INNER JOIN
+            emojis ON reactions.emoji_id = emojis.id
+        WHERE
+            message = ?
     )");
     if (!m_stmt_get_reactions->OK()) {
         fprintf(stderr, "failed to prepare get reactions statement: %s\n", m_db.ErrStr());
@@ -2288,10 +2347,29 @@ bool Store::CreateStatements() {
         return false;
     }
 
+    m_stmt_set_webhook_msg = std::make_unique<Statement>(m_db, R"(
+        REPLACE INTO webhook_messages VALUES (
+            ?, ?, ?, ?
+        )
+    )");
+    if (!m_stmt_set_webhook_msg->OK()) {
+        fprintf(stderr, "failed to prepare set webhook message statement: %s\n", m_db.ErrStr());
+        return false;
+    }
+
+    m_stmt_get_webhook_msg = std::make_unique<Statement>(m_db, R"(
+        SELECT * FROM webhook_messages WHERE message_id = ?
+    )");
+    if (!m_stmt_get_webhook_msg->OK()) {
+        fprintf(stderr, "failed to prepare get webhook message statement: %s\n", m_db.ErrStr());
+        return false;
+    }
+
     return true;
 }
 
-Store::Database::Database(const char *path) {
+Store::Database::Database(const char *path)
+    : m_db_path(path) {
     if (path != ":memory:"s) {
         std::error_code ec;
         if (std::filesystem::exists(path, ec) && !std::filesystem::remove(path, ec)) {
@@ -2308,9 +2386,18 @@ Store::Database::~Database() {
 
 int Store::Database::Close() {
     if (m_db == nullptr) return m_err;
-    m_signal_close.emit();
     m_err = sqlite3_close(m_db);
     m_db = nullptr;
+
+    if (!OK()) {
+        fprintf(stderr, "error closing database: %s\n", ErrStr());
+    } else {
+        if (m_db_path != ":memory:") {
+            std::error_code ec;
+            std::filesystem::remove(m_db_path, ec);
+        }
+    }
+
     return m_err;
 }
 
@@ -2351,17 +2438,9 @@ sqlite3 *Store::Database::obj() {
     return m_db;
 }
 
-Store::Database::type_signal_close Store::Database::signal_close() {
-    return m_signal_close;
-}
-
 Store::Statement::Statement(Database &db, const char *command)
     : m_db(&db) {
     if (m_db->SetError(sqlite3_prepare_v2(m_db->obj(), command, -1, &m_stmt, nullptr)) != SQLITE_OK) return;
-    m_db->signal_close().connect([this] {
-        sqlite3_finalize(m_stmt);
-        m_stmt = nullptr;
-    });
 }
 
 Store::Statement::~Statement() {

@@ -1,5 +1,14 @@
 #pragma once
+#include <gtkmm/box.h>
+#include <gtkmm/button.h>
+#include <gtkmm/eventbox.h>
+#include <gtkmm/image.h>
+#include <gtkmm/menu.h>
+#include <gtkmm/revealer.h>
+#include <gtkmm/scrolledwindow.h>
+#include <gtkmm/textview.h>
 #include "discord/chatsubmitparams.hpp"
+#include "discord/message.hpp"
 #include "discord/permissions.hpp"
 
 class ChatInputAttachmentItem : public Gtk::EventBox {
@@ -7,10 +16,13 @@ public:
     ChatInputAttachmentItem(const Glib::RefPtr<Gio::File> &file);
     ChatInputAttachmentItem(const Glib::RefPtr<Gio::File> &file, const Glib::RefPtr<Gdk::Pixbuf> &pb, bool is_extant = false);
 
-    [[nodiscard]] Glib::RefPtr<Gio::File> GetFile() const;
-    [[nodiscard]] ChatSubmitParams::AttachmentType GetType() const;
-    [[nodiscard]] std::string GetFilename() const;
-    [[nodiscard]] bool IsTemp() const noexcept;
+    Glib::RefPtr<Gio::File> GetFile() const;
+    ChatSubmitParams::AttachmentType GetType() const;
+    std::string GetFilename() const;
+    std::optional<std::string> GetDescription() const;
+    bool IsTemp() const noexcept;
+    bool IsImage() const noexcept;
+
     void RemoveIfTemp();
 
 private:
@@ -21,6 +33,7 @@ private:
     Gtk::Menu m_menu;
     Gtk::MenuItem m_menu_remove;
     Gtk::MenuItem m_menu_set_filename;
+    Gtk::MenuItem m_menu_set_alt_text;
 
     Gtk::Box m_box;
     Gtk::Label m_label;
@@ -29,6 +42,8 @@ private:
     Glib::RefPtr<Gio::File> m_file;
     ChatSubmitParams::AttachmentType m_type;
     std::string m_filename;
+    std::string m_description;
+    bool m_is_image = false;
 
 private:
     using type_signal_item_removed = sigc::signal<void>;
@@ -98,7 +113,7 @@ private:
 };
 
 // file upload, text
-class ChatInputTextContainer : public Gtk::Overlay {
+class ChatInputTextContainer : public Gtk::Box {
 public:
     ChatInputTextContainer();
 
@@ -110,9 +125,9 @@ public:
 
 private:
     void ShowFileChooser();
-    bool GetChildPosition(Gtk::Widget *child, Gdk::Rectangle &pos);
 
-    Gtk::EventBox m_upload_ev;
+    Gtk::Box m_upload_box;
+    Gtk::Button m_upload_button;
     Gtk::Image m_upload_img;
     ChatInputText m_input;
 

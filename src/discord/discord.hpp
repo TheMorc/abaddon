@@ -7,6 +7,7 @@
 #include "voiceclient.hpp"
 #include "voicestateflags.hpp"
 #include "websocket.hpp"
+#include <gdkmm/rgba.h>
 #include <sigc++/sigc++.h>
 #include <nlohmann/json.hpp>
 #include <thread>
@@ -18,10 +19,9 @@
 #include <queue>
 
 #ifdef GetMessage
-    #undef GetMessage
+#undef GetMessage
 #endif
 
-class Abaddon;
 class DiscordClient {
     friend class Abaddon;
 
@@ -55,6 +55,7 @@ public:
     std::optional<GuildData> GetGuild(Snowflake id) const;
     std::optional<GuildMember> GetMember(Snowflake user_id, Snowflake guild_id) const;
     Snowflake GetMemberHoistedRole(Snowflake guild_id, Snowflake user_id, bool with_color = false) const;
+    std::optional<RoleData> GetMemberHoistedRoleCached(const GuildMember &member, const std::unordered_map<Snowflake, RoleData> &roles, bool with_color = false) const;
     std::optional<RoleData> GetMemberHighestRole(Snowflake guild_id, Snowflake user_id) const;
     std::set<Snowflake> GetUsersInGuild(Snowflake id) const;
     std::set<Snowflake> GetChannelsInGuild(Snowflake id) const;
@@ -63,6 +64,7 @@ public:
     void GetArchivedPublicThreads(Snowflake channel_id, const sigc::slot<void(DiscordError, const ArchivedThreadsResponseData &)> &callback);
     void GetArchivedPrivateThreads(Snowflake channel_id, const sigc::slot<void(DiscordError, const ArchivedThreadsResponseData &)> &callback);
     std::vector<Snowflake> GetChildChannelIDs(Snowflake parent_id) const;
+    std::optional<WebhookMessageData> GetWebhookMessageData(Snowflake message_id) const;
 
     // get ids of given list of members for who we do not have the member data
     template<typename Iter>
@@ -159,6 +161,11 @@ public:
             else
                 callback(GetCodeFromResponse(response));
         });
+    }
+
+    template<typename Iter>
+    std::vector<UserData> GetUsersBulk(Iter begin, Iter end) {
+        return m_store.GetUsersBulk(begin, end);
     }
 
     // FetchGuildBans fetches all bans+reasons via api, this func fetches stored bans (so usually just GUILD_BAN_ADD data)
@@ -319,7 +326,7 @@ private:
 
     std::string m_token;
 
-    uint32_t m_build_number = 142000;
+    uint32_t m_build_number = 279382;
 
     void AddUserToGuild(Snowflake user_id, Snowflake guild_id);
     std::map<Snowflake, std::set<Snowflake>> m_guild_to_users;

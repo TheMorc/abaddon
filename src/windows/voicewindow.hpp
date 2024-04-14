@@ -6,7 +6,7 @@
 #include "discord/snowflake.hpp"
 #include <gtkmm/box.h>
 #include <gtkmm/checkbutton.h>
-#include <gtkmm/combobox.h>
+#include <gtkmm/comboboxtext.h>
 #include <gtkmm/listbox.h>
 #include <gtkmm/menubar.h>
 #include <gtkmm/progressbar.h>
@@ -34,6 +34,8 @@ private:
 
     bool UpdateVoiceMeters();
 
+    void UpdateVADParamValue();
+
     Gtk::Box m_main;
     Gtk::Box m_controls;
 
@@ -43,10 +45,18 @@ private:
     Gtk::ScrolledWindow m_scroll;
     Gtk::ListBox m_user_list;
 
-    VolumeMeter m_capture_volume;
-    Gtk::Scale m_capture_gate;
+    // Shows volume for gate VAD method
+    // Shows probability for RNNoise VAD method
+    VolumeMeter m_vad_value;
+    // Volume threshold for gate VAD method
+    // VAD probability threshold for RNNoise VAD method
+    Gtk::Scale m_vad_param;
     Gtk::Scale m_capture_gain;
 
+    Gtk::CheckButton m_noise_suppression;
+    Gtk::CheckButton m_mix_mono;
+
+    Gtk::ComboBoxText m_vad_combo;
     Gtk::ComboBox m_playback_combo;
     Gtk::ComboBox m_capture_combo;
 
@@ -62,23 +72,17 @@ private:
 public:
     using type_signal_mute = sigc::signal<void(bool)>;
     using type_signal_deafen = sigc::signal<void(bool)>;
-    using type_signal_gate = sigc::signal<void(double)>;
-    using type_signal_gain = sigc::signal<void(double)>;
     using type_signal_mute_user_cs = sigc::signal<void(Snowflake, bool)>;
     using type_signal_user_volume_changed = sigc::signal<void(Snowflake, double)>;
 
     type_signal_mute signal_mute();
     type_signal_deafen signal_deafen();
-    type_signal_gate signal_gate();
-    type_signal_gain signal_gain();
     type_signal_mute_user_cs signal_mute_user_cs();
     type_signal_user_volume_changed signal_user_volume_changed();
 
 private:
     type_signal_mute m_signal_mute;
     type_signal_deafen m_signal_deafen;
-    type_signal_gate m_signal_gate;
-    type_signal_gain m_signal_gain;
     type_signal_mute_user_cs m_signal_mute_user_cs;
     type_signal_user_volume_changed m_signal_user_volume_changed;
 };
