@@ -498,8 +498,15 @@ Gtk::Widget *ChatMessageItemContainer::CreateImageComponent(const std::string &p
     GetImageDimensions(inw, inh, w, h, clamp_width, clamp_height);
 
     Gtk::EventBox *ev = Gtk::manage(new Gtk::EventBox);
-    LazyImage* lazyImage = new LazyImage(proxy_url, w, h, false);
-    if (GetExtension(proxy_url) == ".gif" && Abaddon::Get().GetSettings().AnimatedImageEmbeds)
+    
+    std::string::size_type pos = proxy_url.find("https/media.tenor.com");
+    std::string modifiedUrl = proxy_url;
+    if (pos != -1)
+    	modifiedUrl = "https://media1.tenor.com/m" + std::regex_replace(proxy_url.substr(pos+21, proxy_url.length()-pos-25), std::regex("AAe"), "AAC") + ".gif";
+    	
+    
+    LazyImage* lazyImage = new LazyImage(modifiedUrl, w, h, false);
+    if (GetExtension(modifiedUrl) == ".gif")
         lazyImage->SetAnimated(true);
     Gtk::Image *widget = Gtk::manage(lazyImage);
     ev->add(*widget);
