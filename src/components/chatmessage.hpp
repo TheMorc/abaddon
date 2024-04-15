@@ -91,6 +91,7 @@ protected:
     void AttachUserMenuHandler(Gtk::Widget &widget);
 
     bool on_author_button_press(GdkEventButton *ev);
+    bool on_reply_button_press(GdkEventButton *ev);
 
     std::vector<Gtk::Widget *> m_content_widgets;
 
@@ -98,8 +99,10 @@ protected:
     Gtk::Box m_content_box;
     Gtk::EventBox m_content_box_ev;
     Gtk::Box m_meta_box;
+    Gtk::Box m_right_box;
     Gtk::EventBox m_meta_ev;
     Gtk::Label m_author;
+    Gtk::Label m_replyto;
     Gtk::Label m_timestamp;
     Gtk::Label *m_extra = nullptr;
     Gtk::Image m_avatar;

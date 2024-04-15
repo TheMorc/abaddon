@@ -502,6 +502,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateEmbedComponent(const EmbedData &emb
 	
     style->add_class("embed");
     main->set_margin_bottom(8);
+
     main->set_hexpand(false);
     main->set_halign(Gtk::ALIGN_START);
     main->pack_start(*content);
@@ -537,7 +538,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const Attachmen
     	if (pos != -1)
     		modifiedUrl = "https://media1.tenor.com/m" + std::regex_replace(data.ProxyURL.substr(pos+21, data.ProxyURL.length()-pos-25), std::regex("AAe"), "AAC") + ".gif";
     		
-    	if (GetExtension(modifiedUrl) == ".mov" || GetExtension(modifiedUrl) == ".mp4")
+    	if (GetExtension(modifiedUrl) == ".mov" || GetExtension(modifiedUrl) == ".mp4" || GetExtension(modifiedUrl) == ".webp")
     		modifiedUrl += "format=jpeg";	
     		
     	LazyImage* lazyImage = new LazyImage(modifiedUrl, w, h, false);

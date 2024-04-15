@@ -171,6 +171,7 @@ bool IsURLViewableImage(const std::string &url) {
     static const char *exts[] = { ".jpeg",
                                   ".jpg",
                                   ".gif",
+                                  ".webp",
                                   ".mov",
                                   ".mp4",
                                   ".png", nullptr };
