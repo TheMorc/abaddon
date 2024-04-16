@@ -543,7 +543,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const Attachmen
     	std::string::size_type pos = data.ProxyURL.find("https/media.tenor.com");
     	std::string modifiedUrl = data.ProxyURL;
     	if (pos != -1)
-    		modifiedUrl = "https://media1.tenor.com/m" + std::regex_replace(data.ProxyURL.substr(pos+21, data.ProxyURL.length()-pos-25), std::regex("AAe"), "AAC") + ".gif";
+    		modifiedUrl = "https://media1.tenor.com/m" + std::regex_replace(data.ProxyURL.substr(pos+21, data.ProxyURL.length()-pos-25), std::regex("AAe"), "AAd") + ".gif";
     		
     	if (GetExtension(modifiedUrl) == ".mov" || GetExtension(modifiedUrl) == ".mp4" || GetExtension(modifiedUrl) == ".webp")
     		modifiedUrl += "format=jpeg";	
