@@ -522,7 +522,12 @@ Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const Attachmen
     auto *ev = Gtk::manage(new Gtk::EventBox);
     Gtk::Box *content = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL));
     
-    auto *btn = Gtk::manage(new Gtk::Label(data.Filename + " " + HumanReadableBytes(data.Bytes))); // Gtk::LinkButton flat out doesn't work :D
+    Gtk::Label *attachment_label = new Gtk::Label(data.Filename + " " + HumanReadableBytes(data.Bytes));
+    attachment_label->set_size_request(clamp_width, -1);
+    attachment_label->set_line_wrap(true);
+    attachment_label->set_line_wrap_mode(Pango::WrapMode::WRAP_CHAR);
+    
+    auto *btn = Gtk::manage(attachment_label); // Gtk::LinkButton flat out doesn't work :D
     ev->set_hexpand(false);
     ev->set_halign(Gtk::ALIGN_START);
     ev->get_style_context()->add_class("message-attachment-box");
