@@ -523,7 +523,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const Attachmen
     Gtk::Box *content = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_VERTICAL));
     
     Gtk::Label *attachment_label = new Gtk::Label(data.Filename + " " + HumanReadableBytes(data.Bytes));
-    attachment_label->set_size_request(clamp_width, -1);
+    
     attachment_label->set_line_wrap(true);
     attachment_label->set_line_wrap_mode(Pango::WrapMode::WRAP_CHAR);
     attachment_label->set_ellipsize(Pango::EllipsizeMode::ELLIPSIZE_MIDDLE);
@@ -538,7 +538,6 @@ Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const Attachmen
 	
 	if(IsURLViewableImage(data.ProxyURL)){
     	GetImageDimensions(*data.Width, *data.Height, w, h, clamp_width, clamp_height);
-	
     	
     	std::string::size_type pos = data.ProxyURL.find("https/media.tenor.com");
     	std::string modifiedUrl = data.ProxyURL;
@@ -561,6 +560,10 @@ Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const Attachmen
 		content->add(*widget);
     }
     
+    if (w == 0)
+    	attachment_label->set_size_request(clamp_width, -1);
+    else
+    	attachment_label->set_size_request(w, -1);
 
     AddClickHandler(ev, data.URL);
 
