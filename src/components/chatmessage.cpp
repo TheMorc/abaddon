@@ -526,6 +526,8 @@ Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const Attachmen
     attachment_label->set_size_request(clamp_width, -1);
     attachment_label->set_line_wrap(true);
     attachment_label->set_line_wrap_mode(Pango::WrapMode::WRAP_CHAR);
+    attachment_label->set_ellipsize(Pango::EllipsizeMode::ELLIPSIZE_MIDDLE);
+    attachment_label->set_max_width_chars(0);
     
     auto *btn = Gtk::manage(attachment_label); // Gtk::LinkButton flat out doesn't work :D
     ev->set_hexpand(false);
