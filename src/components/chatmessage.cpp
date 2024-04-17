@@ -527,7 +527,6 @@ Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const Attachmen
     attachment_label->set_line_wrap(true);
     attachment_label->set_line_wrap_mode(Pango::WrapMode::WRAP_CHAR);
     attachment_label->set_ellipsize(Pango::EllipsizeMode::ELLIPSIZE_MIDDLE);
-    attachment_label->set_max_width_chars(0);
     
     auto *btn = Gtk::manage(attachment_label); // Gtk::LinkButton flat out doesn't work :D
     ev->set_hexpand(false);
@@ -537,6 +536,8 @@ Gtk::Widget *ChatMessageItemContainer::CreateAttachmentComponent(const Attachmen
 	content->add(*btn);
 	
 	if(IsURLViewableImage(data.ProxyURL)){
+		attachment_label->set_max_width_chars(0);
+		
     	GetImageDimensions(*data.Width, *data.Height, w, h, clamp_width, clamp_height);
     	
     	std::string::size_type pos = data.ProxyURL.find("https/media.tenor.com");
