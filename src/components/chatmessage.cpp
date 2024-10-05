@@ -499,7 +499,7 @@ Gtk::Widget *ChatMessageItemContainer::CreateImageComponent(const std::string &p
 
     Gtk::EventBox *ev = Gtk::manage(new Gtk::EventBox);
     LazyImage* lazyImage = new LazyImage(proxy_url, w, h, false);
-    if (GetExtension(proxy_url) == ".gif" && Abaddon::Get().GetSettings().AnimatedImageEmbeds)
+    if (GetExtension(proxy_url) == ".gif")
         lazyImage->SetAnimated(true);
     Gtk::Image *widget = Gtk::manage(lazyImage);
     ev->add(*widget);
