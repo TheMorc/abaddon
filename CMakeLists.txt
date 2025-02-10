@@ -147,6 +147,7 @@ set(USE_MINIAUDIO FALSE)
 
 if (APPLE)
     target_link_libraries(abaddon "-framework CoreFoundation")
+    target_link_libraries(abaddon "-framework ApplicationServices")
     target_link_libraries(abaddon "-framework CoreAudio")
     target_link_libraries(abaddon "-framework AudioToolbox")
     target_link_libraries(abaddon "-framework AudioUnit")
