@@ -6,10 +6,21 @@
 
 #include <gtkmm.h>
 
+#if defined(__APPLE__)
+#include <CoreFoundation/CoreFoundation.h>
+#include <ApplicationServices/ApplicationServices.h>
+#endif
+
 void LaunchBrowser(const Glib::ustring &url) {
+#if defined(__APPLE__)
+	CFURLRef url_ref = CFURLCreateWithBytes (NULL, (UInt8*)url.c_str(), url.length(), kCFStringEncodingASCII, NULL);
+	LSOpenCFURLRef(url_ref,0);
+	CFRelease(url_ref);
+#else
     GError *err = nullptr;
     if (!gtk_show_uri_on_window(nullptr, url.c_str(), GDK_CURRENT_TIME, &err))
         printf("failed to open uri: %s\n", err->message);
+#endif
 }
 
 void GetImageDimensions(int inw, int inh, int &outw, int &outh, int clampw, int clamph) {
