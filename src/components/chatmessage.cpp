@@ -147,11 +147,23 @@ void ChatMessageItemContainer::UpdateAttributes() {
         m_attrib_label->set_markup("<span color='#999999'>[edited]</span>");
 }
 
+#ifdef __APPLE__
+#include "quicklook.h"
+#endif
+
 void ChatMessageItemContainer::AddClickHandler(Gtk::Widget *widget, const std::string &url) {
     // clang-format off
     widget->signal_button_release_event().connect([url](GdkEventButton *event) -> bool {
         if (event->type == GDK_BUTTON_RELEASE && event->button == GDK_BUTTON_PRIMARY) {
-            LaunchBrowser(url);
+        	#ifdef __APPLE__
+        	if (IsURLViewableImage(url)) {
+				Abaddon::Get().GetImageManager().GetCache().GetFileFromURL(url, [=](const std::string &path) {
+        			QuickLook(path.c_str());
+    			});
+			}
+			else
+			#endif
+	            LaunchBrowser(url);
             return true;
         }
         return false;
